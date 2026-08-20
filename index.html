@@ -232,6 +232,8 @@ async function sha256Hex(str){
 function randomHex(len){ const a=new Uint8Array(len); crypto.getRandomValues(a); return [...a].map(b=>b.toString(16).padStart(2,'0')).join(''); }
 async function hashPassword(pw, salt){ return sha256Hex(salt+':'+pw); }
 async function hashAnswer(ans){ return sha256Hex((ans||'').trim().toLowerCase()); }
+// SHA-256 hash of the Developer master password — the plaintext is never stored in this file.
+const DEV_MASTER_HASH = '683f6f7ff446a1e57cdb0aca97173b40917886a9d768aa126f6ca6b28595830d';
 
 function validaCPF(cpfRaw){
   const cpf=(cpfRaw||'').replace(/\D/g,'');
@@ -594,7 +596,7 @@ function renderLoginScreen(){
   document.querySelectorAll('[data-role-tab]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ authTemp.loginRole = btn.dataset.roleTab; render(); });
   });
-  document.getElementById('lnk-signup').addEventListener('click', ()=>{ authTemp={}; authScreen = appData.users.length===0 ? 'signup' : 'signup-role'; render(); });
+  document.getElementById('lnk-signup').addEventListener('click', ()=>{ authTemp={}; authScreen='signup-role'; render(); });
   document.getElementById('lnk-forgot').addEventListener('click', ()=>{ authTemp={}; authScreen='forgot'; render(); });
   document.getElementById('lnk-install')?.addEventListener('click', openInstallModal);
   document.getElementById('btn-login').addEventListener('click', doLogin);
@@ -629,8 +631,11 @@ function renderSignupRoleChoice(){
         <div class="rc-title">🗂️ Gestor</div>
         <div class="rc-desc">Visualiza fichas, calendário e relatórios — sem editar.</div>
       </button>
+      <button type="button" class="role-choice-card" id="rc-dev">
+        <div class="rc-title">🔑 Desenvolvedor</div>
+        <div class="rc-desc">Acesso total. Requer senha mestra do sistema.</div>
+      </button>
     </div>
-    <div class="auth-info" style="margin-top:16px;">Contas de Desenvolvedor são criadas apenas pela primeira conta do sistema ou promovidas por um Desenvolvedor já existente, por segurança.</div>
     <div style="text-align:center;margin-top:14px;">
       <button class="auth-link" id="lnk-back-login-rc">Voltar ao login</button>
     </div>
@@ -638,6 +643,7 @@ function renderSignupRoleChoice(){
   document.getElementById('lnk-back-login-rc').addEventListener('click', ()=>{ authTemp={}; authScreen='login'; render(); });
   document.getElementById('rc-professor').addEventListener('click', ()=>{ authTemp={targetRole:'professor'}; authScreen='signup'; render(); });
   document.getElementById('rc-gestor').addEventListener('click', ()=>{ authTemp={targetRole:'gestor'}; authScreen='signup'; render(); });
+  document.getElementById('rc-dev').addEventListener('click', ()=>{ authTemp={targetRole:'desenvolvedor'}; authScreen='signup'; render(); });
 }
 
 function renderSignupScreen(){
@@ -648,8 +654,8 @@ function renderSignupScreen(){
 
 function renderSignupDados(){
   const f = authTemp.form || {nome:'',email:'',telefone:'',cpf:'',senha:'',senha2:''};
-  const isBootstrap = appData.users.length===0;
-  const targetRole = isBootstrap ? 'desenvolvedor' : (authTemp.targetRole || 'professor');
+  const targetRole = authTemp.targetRole || 'professor';
+  const isDevRole = targetRole==='desenvolvedor';
   authShell(`
     <div class="serif" style="text-align:center;font-size:17px;margin-bottom:6px;">Criar conta</div>
     <div style="text-align:center;margin-bottom:14px;"><span class="role-pill ${targetRole}">${ROLE_LABEL[targetRole]}</span></div>
@@ -661,6 +667,7 @@ function renderSignupDados(){
       <label class="field"><span>CPF</span><input id="su-cpf" value="${esc(f.cpf)}" placeholder="000.000.000-00"></label>
       ${pwField('su-senha','Senha (mínimo 8 caracteres)','')}
       ${pwField('su-senha2','Confirmar senha','')}
+      ${isDevRole?pwField('su-master','Senha mestra de Desenvolvedor',''):''}
     </div>
     <button class="btn btn-gold" id="btn-signup-next" style="width:100%;padding:11px 0;margin-top:16px;">Continuar</button>
     <div style="text-align:center;margin-top:14px;">
@@ -677,6 +684,7 @@ function renderSignupDados(){
     const cpfDigits = document.getElementById('su-cpf').value.replace(/\D/g,'');
     const senha = document.getElementById('su-senha').value;
     const senha2 = document.getElementById('su-senha2').value;
+    const masterPw = isDevRole ? document.getElementById('su-master').value : '';
     const formState = {nome, email, telefone:telRaw, cpf:document.getElementById('su-cpf').value};
     const fail = (msg)=>{ authTemp={step:'dados', form:formState, targetRole, error:msg}; render(); };
     if(!nome) return fail('Informe o nome completo.');
@@ -689,6 +697,10 @@ function renderSignupDados(){
     if(senha.length<8) return fail('A senha deve ter pelo menos 8 caracteres.');
     if(senha!==senha2) return fail('As senhas não coincidem.');
     (async ()=>{
+      if(isDevRole){
+        const masterHash = await sha256Hex(masterPw);
+        if(masterHash !== DEV_MASTER_HASH) return fail('Senha mestra de Desenvolvedor incorreta.');
+      }
       const salt = randomHex(16);
       const passHash = await hashPassword(senha, salt);
       authTemp = {
