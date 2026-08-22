@@ -578,6 +578,38 @@ async function chamarClaudeIA(promptTexto){
   return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
 }
 
+const GEMINI_KEY_STORAGE = 'maximus-gemini-key';
+function getGeminiKey(){ return localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
+function setGeminiKey(k){ if(k) localStorage.setItem(GEMINI_KEY_STORAGE, k); else localStorage.removeItem(GEMINI_KEY_STORAGE); }
+
+async function chamarGeminiIA(promptTexto){
+  const key = getGeminiKey();
+  if(!key) throw new Error('NO_KEY');
+  const model = 'gemini-2.5-flash';
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: promptTexto }] }] }),
+  });
+  if(!res.ok){
+    const errText = await res.text().catch(()=> '');
+    throw new Error('API_ERROR:' + res.status + ':' + errText.slice(0,300));
+  }
+  const data = await res.json();
+  const text = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts || []).map(p=>p.text).join('\n');
+  return text.trim();
+}
+
+const IA_PROVIDER_STORAGE = 'maximus-ia-provider';
+function getIAProvider(){ return localStorage.getItem(IA_PROVIDER_STORAGE) || 'claude'; }
+function setIAProvider(p){ localStorage.setItem(IA_PROVIDER_STORAGE, p); }
+
+async function chamarIA(promptTexto){
+  const provider = getIAProvider();
+  if(provider === 'gemini') return chamarGeminiIA(promptTexto);
+  return chamarClaudeIA(promptTexto);
+}
+
 function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStart, periodoEnd){
   const sorted = entries.slice().sort((a,b)=> a.data<b.data?-1:1);
   const registros = sorted.map(e=>{
@@ -2151,6 +2183,9 @@ function renderUserManagement(){
   const filtro = uiState.userEscolaFiltro || 'todas';
   const usersFiltrados = filtro==='todas' ? appData.users : appData.users.filter(u=>u.escola===filtro);
   const pendentes = appData.users.filter(u=>u.status && u.status!=='ativo');
+  const provider = getIAProvider();
+  const claudeKey = getAnthropicKey();
+  const geminiKey = getGeminiKey();
   return `
     <div class="main-panel">
       ${pendentes.length>0?`
@@ -2158,6 +2193,38 @@ function renderUserManagement(){
           ⚠️ <span><strong>${pendentes.length} conta(s) aguardando aprovação.</strong> Novas contas de Professor/Auxiliar e Gestor só ganham acesso depois que você aprovar aqui embaixo.</span>
         </div>
       `:''}
+
+      <div class="card" style="margin-bottom:20px;">
+        <div class="tab-badge">Configurar IA</div>
+        <div class="serif" style="font-size:18px;font-weight:700;color:#B8860B;margin:8px 0 6px;">🤖 Geração de relatórios e pareceres por IA</div>
+        <div style="font-size:12px; color:var(--dim); margin-bottom:14px;">A chave fica salva só neste navegador/aparelho — nunca é enviada para o Firebase nem aparece no código do site.</div>
+
+        <label class="field" style="margin-bottom:12px;"><span>Provedor de IA</span>
+          <select id="ia-provider-select">
+            <option value="claude" ${provider==='claude'?'selected':''}>Claude (Anthropic) — pago por uso, sem uso dos dados para treinar modelos</option>
+            <option value="gemini" ${provider==='gemini'?'selected':''}>Gemini (Google) — gratuito, mas os dados podem ser usados pelo Google para treinar modelos</option>
+          </select>
+        </label>
+
+        <div class="grid2">
+          <div>
+            <label class="field"><span>Chave de API — Claude (Anthropic)</span>
+              <div class="pw-wrap"><input type="password" id="ia-claude-key" value="${esc(claudeKey)}" placeholder="sk-ant-..."><button type="button" class="pw-eye" data-toggle-pw="ia-claude-key">👁</button></div>
+            </label>
+            <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha em console.anthropic.com</div>
+          </div>
+          <div>
+            <label class="field"><span>Chave de API — Gemini (Google)</span>
+              <div class="pw-wrap"><input type="password" id="ia-gemini-key" value="${esc(geminiKey)}" placeholder="AIza..."><button type="button" class="pw-eye" data-toggle-pw="ia-gemini-key">👁</button></div>
+            </label>
+            <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha gratuitamente em aistudio.google.com</div>
+          </div>
+        </div>
+
+        <button class="btn btn-gold" id="btn-save-ia-config" style="margin-top:14px;">Salvar configuração de IA</button>
+        <div id="ia-config-saved-msg" style="display:none; margin-top:8px; font-size:12.5px; color:#3F7D45;">✅ Configuração salva neste aparelho.</div>
+      </div>
+
       <div class="card">
         <div class="tab-badge">Gerenciar usuários</div>
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin:8px 0 16px;">
@@ -2385,6 +2452,15 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('user-escola-filter')?.addEventListener('change', (e)=>{
     uiState.userEscolaFiltro = e.target.value; renderApp();
   });
+  wirePwToggles();
+  document.getElementById('btn-save-ia-config')?.addEventListener('click', ()=>{
+    setIAProvider(document.getElementById('ia-provider-select').value);
+    setAnthropicKey(document.getElementById('ia-claude-key').value.trim());
+    setGeminiKey(document.getElementById('ia-gemini-key').value.trim());
+    const msg = document.getElementById('ia-config-saved-msg');
+    msg.style.display = 'block';
+    setTimeout(()=>{ msg.style.display = 'none'; }, 3000);
+  });
   document.getElementById('btn-add-escola')?.addEventListener('click', ()=>{
     const nome = document.getElementById('nova-escola-nome').value.trim();
     const rede = document.getElementById('nova-escola-rede').value;
@@ -2470,10 +2546,10 @@ function wireAppListeners(selected, canEdit, isDev){
       const prompt = montarPromptParecerPEI(selected, potenc, f.dificuldades, periodo.label, cidLegendas);
       btn.disabled = true; btn.textContent = 'Gerando…';
       try{
-        const texto = await chamarClaudeIA(prompt);
+        const texto = await chamarIA(prompt);
         document.getElementById('pei-parecer-text').value = texto;
       }catch(e){
-        if(e.message==='NO_KEY') alert('Configure sua chave de API da Anthropic em "Gerenciar usuários" antes de usar essa opção.');
+        if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
         else alert('Erro ao gerar com IA: ' + e.message);
       }finally{
         btn.disabled = false; btn.textContent = '🤖 Gerar com IA';
@@ -2539,12 +2615,12 @@ function wireAppListeners(selected, canEdit, isDev){
     const prompt = montarPromptRelatorioPedagogico(selected, entries, uiState.bim, uiState.bimYear, start, end);
     btn.disabled = true; btn.textContent = 'Gerando…';
     try{
-      const texto = await chamarClaudeIA(prompt);
+      const texto = await chamarIA(prompt);
       const ta = document.getElementById('pedagogico-text');
       ta.value = texto;
       ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
     }catch(e){
-      if(e.message==='NO_KEY') alert('Configure sua chave de API da Anthropic em "Gerenciar usuários" antes de usar essa opção.');
+      if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
       else alert('Erro ao gerar com IA: ' + e.message);
     }finally{
       btn.disabled = false; btn.textContent = '🤖 Gerar com IA (Claude)';
