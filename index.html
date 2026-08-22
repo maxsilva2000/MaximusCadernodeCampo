@@ -152,6 +152,14 @@
   .ai-disclaimer{background:#EFEAFB; border:1px solid #D6CCF0; color:#4A3C82; font-size:11.5px; padding:8px 12px; border-radius:7px; margin-bottom:14px; display:flex; gap:8px; align-items:flex-start;}
 
   table.users-table{width:100%; border-collapse:collapse; font-size:13px;}
+  table.pei-table{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:18px;}
+  table.pei-table th{background:var(--panel-alt); text-align:left; padding:8px; border:1px solid var(--border-soft); font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--gold-deep);}
+  table.pei-table td{padding:6px; border:1px solid var(--border-soft); vertical-align:top;}
+  table.pei-table textarea, table.pei-table input{width:100%; border:none; background:transparent; padding:4px; font-size:12.5px; resize:vertical; min-height:50px;}
+  .pei-area-title{background:var(--black); color:#D9B84A; font-weight:700; padding:8px 12px; border-radius:6px; margin:18px 0 10px; font-size:13px;}
+  .cid-check-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px; max-height:220px; overflow-y:auto; border:1px solid var(--border-soft); border-radius:8px; padding:10px; background:#fff;}
+  .cid-check-item{display:flex; align-items:flex-start; gap:6px; font-size:12px;}
+  .cid-check-item input{width:auto; margin-top:2px;}
   table.users-table th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--dim); padding:8px 10px; border-bottom:1px solid var(--border);}
   table.users-table td{padding:9px 10px; border-bottom:1px solid var(--border-soft); vertical-align:middle;}
 
@@ -370,14 +378,127 @@ function cidContext(cid){
     [/^F7[0-9]/, 'Trata-se de aluno(a) com deficiência intelectual, sendo fundamental a adequação das estratégias pedagógicas ao seu ritmo de aprendizagem, com ênfase no desenvolvimento da autonomia e das habilidades funcionais no cotidiano escolar.'],
     [/^F84/, 'Trata-se de aluno(a) com Transtorno do Espectro Autista (TEA), para o qual as práticas pedagógicas devem priorizar rotina estruturada, comunicação clara e apoio à regulação sensorial e social.'],
     [/^F90/, 'Trata-se de aluno(a) com Transtorno do Déficit de Atenção com Hiperatividade (TDAH), sendo recomendadas estratégias de organização, fragmentação das tarefas e reforço positivo contínuo.'],
+    [/^F80/, 'Trata-se de aluno(a) com transtorno específico do desenvolvimento da fala e da linguagem, sendo recomendado o uso de recursos de apoio à comunicação e tempo ampliado para resposta.'],
+    [/^F81/, 'Trata-se de aluno(a) com transtorno específico das habilidades escolares, sendo recomendada a adaptação de materiais de leitura, escrita ou cálculo conforme a necessidade específica.'],
+    [/^G40/, 'Trata-se de aluno(a) com epilepsia, sendo importante manter um ambiente seguro e comunicação constante com a família sobre eventuais crises.'],
     [/^G80/, 'Trata-se de aluno(a) com paralisia cerebral, sendo essenciais as adaptações relacionadas à mobilidade, à comunicação e ao acesso físico às atividades propostas.'],
     [/^Q90/, 'Trata-se de aluno(a) com Síndrome de Down, sendo relevante o uso de recursos visuais, repetição estruturada e valorização das conquistas individuais ao longo do processo de aprendizagem.'],
+    [/^Q05/, 'Trata-se de aluno(a) com espinha bífida, sendo essenciais as adaptações relacionadas à mobilidade e à acessibilidade física do ambiente escolar.'],
     [/^H9[01]/, 'Trata-se de aluno(a) com deficiência auditiva, sendo necessário o uso de recursos visuais e, quando aplicável, de Libras como forma de comunicação.'],
     [/^H54/, 'Trata-se de aluno(a) com deficiência visual, sendo necessárias adaptações táteis e sonoras nos materiais e nas atividades propostas.'],
   ];
   for(const [re, txt] of map){ if(re.test(c)) return txt; }
   return `Trata-se de aluno(a) acompanhado(a) considerando as especificidades relacionadas ao CID ${cid}, com as estratégias pedagógicas adaptadas conforme suas necessidades individuais.`;
 }
+function estrategiasAdaptacao(cid){
+  const c=(cid||'').toUpperCase();
+  if(/^F7[0-9]/.test(c)) return 'materiais concretos, atividades práticas e visuais, linguagem simples e objetiva, repetição estruturada, tempo ampliado e mediação individualizada constante, com foco no desenvolvimento de habilidades funcionais e na autonomia';
+  if(/^F84/.test(c)) return 'rotina estruturada e previsível, comunicação clara e objetiva, apoio visual (agenda visual, pictogramas), redução de estímulos sensoriais excessivos e mediação individualizada para favorecer a regulação emocional e a participação social';
+  if(/^F90/.test(c)) return 'fragmentação das tarefas em etapas curtas, instruções objetivas, reforço positivo contínuo, pausas programadas e organização visual do tempo e das atividades';
+  if(/^F80/.test(c)) return 'apoio à comunicação (recursos visuais, gestuais ou alternativos), repetição e modelagem da linguagem, tempo ampliado para resposta e valorização de todas as formas de expressão do(a) estudante';
+  if(/^F81/.test(c)) return 'adaptação de materiais de leitura e escrita, uso de recursos multissensoriais, tempo ampliado, avaliação processual e valorização das estratégias próprias de aprendizagem do(a) estudante';
+  if(/^G40/.test(c)) return 'ambiente seguro, atenção às condições de segurança durante as atividades, comunicação com a família sobre crises e retomada gradual das atividades após eventuais episódios';
+  if(/^G80/.test(c)) return 'adaptações relacionadas à mobilidade e ao posicionamento, recursos de acessibilidade física, apoio físico quando necessário e adequação dos materiais para a execução motora das atividades';
+  if(/^Q05/.test(c)) return 'adaptações relacionadas à mobilidade, acessibilidade física do ambiente e adequação de materiais e mobiliário';
+  if(/^H9[01]/.test(c)) return 'uso de recursos visuais, apoio de Libras quando aplicável, posicionamento estratégico em sala e comunicação visual clara das instruções';
+  if(/^H54/.test(c)) return 'materiais em Braille ou ampliados quando aplicável, descrição verbal das atividades visuais, recursos táteis e sonoros e organização física do espaço para autonomia de locomoção';
+  if(/^Q90/.test(c)) return 'uso de recursos visuais, repetição estruturada, tempo ampliado, valorização das conquistas individuais e atividades que favoreçam a coordenação motora e a autonomia';
+  return 'recursos e estratégias adaptados às necessidades específicas do(a) estudante, com mediação individualizada, linguagem acessível e avaliação processual e formativa';
+}
+
+const CID_LIST = [
+  {codigo:'F70', legenda:'Deficiência Intelectual Leve'},
+  {codigo:'F71', legenda:'Deficiência Intelectual Moderada'},
+  {codigo:'F72', legenda:'Deficiência Intelectual Grave'},
+  {codigo:'F73', legenda:'Deficiência Intelectual Profunda'},
+  {codigo:'F80', legenda:'Transtornos Específicos do Desenvolvimento da Fala e da Linguagem'},
+  {codigo:'F81', legenda:'Transtornos Específicos do Desenvolvimento das Habilidades Escolares'},
+  {codigo:'F84.0', legenda:'Autismo Infantil (Transtorno do Espectro Autista)'},
+  {codigo:'F84.1', legenda:'Autismo Atípico'},
+  {codigo:'F84.5', legenda:'Síndrome de Asperger'},
+  {codigo:'F90', legenda:'Transtornos Hipercinéticos (TDAH)'},
+  {codigo:'G40', legenda:'Epilepsia'},
+  {codigo:'G80', legenda:'Paralisia Cerebral'},
+  {codigo:'H90', legenda:'Perda de Audição Condutiva e Neurossensorial (Surdez)'},
+  {codigo:'H91', legenda:'Outras Perdas de Audição'},
+  {codigo:'H54', legenda:'Cegueira e Baixa Visão'},
+  {codigo:'Q90', legenda:'Síndrome de Down'},
+  {codigo:'Q05', legenda:'Espinha Bífida'},
+];
+
+const UNIDADES_TEMATICAS = {
+  'Língua Portuguesa': 'Leitura e escuta, produção de textos, oralidade, análise linguística e semiótica',
+  'Matemática': 'Números, álgebra, geometria, grandezas e medidas, probabilidade e estatística',
+  'Ciências': 'Matéria e energia, vida e evolução, Terra e Universo',
+  'Geografia': 'O sujeito e seu lugar no mundo, conexões e escalas, natureza, ambientes e qualidade de vida, formas de representação e pensamento espacial',
+  'História': 'Tempo e temporalidades, sujeitos e culturas, registros da história e produção do conhecimento histórico',
+  'Arte': 'Artes visuais, dança, música, teatro e artes integradas',
+  'Educação Física': 'Brincadeiras e jogos, esportes, ginásticas, danças, lutas e práticas corporais de aventura',
+  'Língua Inglesa': 'Oralidade, leitura, escrita, conhecimentos linguísticos e dimensão intercultural',
+  'Ensino Religioso': 'Identidades e alteridades, manifestações religiosas',
+  'Filosofia': 'Ética, cidadania, identidade e pensamento crítico',
+  'Sociologia': 'Cidadania, cultura e relações sociais',
+  'Biologia': 'Vida, meio ambiente e qualidade de vida',
+  'Física': 'Fenômenos naturais, energia e tecnologia',
+  'Química': 'Matéria, transformações e fenômenos do cotidiano',
+  'O eu, o outro e o nós': 'Convivência, identidade, autonomia e interação social',
+  'Corpo, gestos e movimentos': 'Consciência corporal, coordenação motora ampla e fina, expressão corporal',
+  'Traços, sons, cores e formas': 'Expressão artística, sensorial e criativa',
+  'Escuta, fala, pensamento e imaginação': 'Comunicação, linguagem oral, imaginação e narrativa',
+  'Espaços, tempos, quantidades, relações e transformações': 'Exploração do espaço, noções matemáticas iniciais e relações com o mundo físico e social',
+};
+
+const SEGMENT_AREAS = {
+  infantil: { label:'Educação Infantil', areas:[
+    { nome:'Campos de Experiência', componentes:['O eu, o outro e o nós','Corpo, gestos e movimentos','Traços, sons, cores e formas','Escuta, fala, pensamento e imaginação','Espaços, tempos, quantidades, relações e transformações'] },
+  ]},
+  fund1: { label:'Ensino Fundamental – Anos Iniciais', areas:[
+    { nome:'I – Área da Linguagem', componentes:['Língua Portuguesa','Arte','Educação Física'] },
+    { nome:'II – Área da Matemática', componentes:['Matemática'] },
+    { nome:'III – Área das Ciências Humanas', componentes:['Geografia','História','Ensino Religioso'] },
+    { nome:'IV – Área das Ciências da Natureza', componentes:['Ciências'] },
+  ]},
+  fund2: { label:'Ensino Fundamental – Anos Finais', areas:[
+    { nome:'I – Linguagens', componentes:['Língua Portuguesa','Arte','Educação Física','Língua Inglesa'] },
+    { nome:'II – Matemática', componentes:['Matemática'] },
+    { nome:'III – Ciências Humanas', componentes:['Geografia','História','Ensino Religioso'] },
+    { nome:'IV – Ciências da Natureza', componentes:['Ciências'] },
+  ]},
+  medio: { label:'Ensino Médio', areas:[
+    { nome:'I – Linguagens e suas Tecnologias', componentes:['Língua Portuguesa','Arte','Educação Física','Língua Inglesa'] },
+    { nome:'II – Matemática e suas Tecnologias', componentes:['Matemática'] },
+    { nome:'III – Ciências Humanas e Sociais Aplicadas', componentes:['História','Geografia','Filosofia','Sociologia'] },
+    { nome:'IV – Ciências da Natureza e suas Tecnologias', componentes:['Biologia','Física','Química'] },
+  ]},
+};
+
+function peiPeriodo(periodicidade, ano, bim, dataInicio){
+  if(periodicidade==='bimestral'){
+    const [start,end] = bimestreRange(ano, bim);
+    const s = new Date(start+'T12:00:00'), e = new Date(end+'T12:00:00');
+    const totalMs = e - s;
+    const rev1 = new Date(s.getTime() + totalMs*0.33);
+    const rev2 = new Date(s.getTime() + totalMs*0.66);
+    return { start, end, revisoes:[rev1.toISOString().slice(0,10), rev2.toISOString().slice(0,10)], label:`${bim}º Bimestre de ${ano}` };
+  }
+  const s = dataInicio || todayISO();
+  const sd = new Date(s+'T12:00:00');
+  let ed;
+  if(periodicidade==='quinzenal'){ ed = new Date(sd); ed.setDate(ed.getDate()+14); }
+  else { ed = new Date(sd.getFullYear(), sd.getMonth()+1, 0); }
+  return { start:s, end: ed.toISOString().slice(0,10), revisoes:[], label: periodicidade==='quinzenal' ? 'Quinzenal' : 'Mensal' };
+}
+
+function gerarBlocoComponente(componente, cidCodigos){
+  const unidade = UNIDADES_TEMATICAS[componente] || 'Conteúdos e habilidades da área, adaptados conforme a necessidade do(a) estudante';
+  const estrategiasUnicas = [...new Set(cidCodigos.map(estrategiasAdaptacao))];
+  const estrategiasTxt = estrategiasUnicas.join('; ');
+  const objetivos = `Desenvolver habilidades relacionadas a ${unidade.toLowerCase()}, de forma adaptada ao ritmo, ao potencial e às especificidades do(a) estudante.`;
+  const metodologia = `Serão desenvolvidas atividades adaptadas conforme as necessidades do(a) estudante, utilizando ${estrategiasTxt}. As propostas serão revisadas e ajustadas conforme a resposta do(a) estudante ao longo do período.`;
+  const avaliacao = `A avaliação será contínua, processual e formativa, considerando a participação, o envolvimento nas atividades, as respostas aos estímulos e o progresso individual do(a) estudante diante das habilidades adaptadas trabalhadas no período.`;
+  return { unidade, objetivos, metodologia, avaliacao };
+}
+
 function gerarRelatorioPedagogico(student, entries, bim, year){
   const [start,end] = bimestreRange(year, bim);
   const sorted = entries.slice().sort((a,b)=> a.data<b.data?-1:1);
@@ -1242,7 +1363,7 @@ function renderMainPanel(selected, canEdit){
         ${selected.responsavel ? `<div style="margin-top:10px;font-size:12.5px;color:var(--dim);">Acompanhamento: ${esc(selected.responsavel)}</div>` : ''}
       </div>
 
-      ${uiState.view==='relatorio' ? renderMonthlyReport(selected, monthEntries) : uiState.view==='pedagogico' ? renderPedagogicoReport(selected) : `
+      ${uiState.view==='relatorio' ? renderMonthlyReport(selected, monthEntries) : uiState.view==='pedagogico' ? renderPedagogicoReport(selected) : uiState.view==='pei' ? renderPEI(selected) : `
         <div style="display:grid; grid-template-columns:260px 1fr; gap:20px; align-items:start;" class="cal-plus-list">
           ${renderCalendar(entriesByDate)}
           <div>
@@ -1252,6 +1373,7 @@ function renderMainPanel(selected, canEdit){
                 ${canEdit?`<button class="btn" id="btn-new-entry">+ Registrar dia</button>`:''}
                 <button class="btn btn-gold" id="btn-monthly-report">📄 Relatório mensal</button>
                 <button class="btn btn-gold" id="btn-pedagogico-report">📘 Relatório pedagógico (bimestre)</button>
+                ${canEdit?`<button class="btn btn-gold" id="btn-pei">📋 Gerar PEI</button>`:''}
               </div>
             </div>
             <div style="display:flex; flex-direction:column; gap:12px;">
@@ -1502,6 +1624,163 @@ function renderPedagogicoReport(student){
   `;
 }
 
+/* ============ PEI ============ */
+function renderPEI(student){
+  const f = uiState.peiForm || {
+    modelo:'municipal', segmento:'fund1', periodicidade:'bimestral',
+    ano:(new Date()).getFullYear(), bim:getBimestre(new Date()),
+    dataInicio: todayISO(),
+    cids: student.cid ? [student.cid.trim().toUpperCase()] : [],
+    cidCustom:'', potencialidades:'', dificuldades:'',
+  };
+  uiState.peiForm = f;
+
+  return `
+    <div class="main-panel">
+      <div class="card no-print" style="margin-bottom:20px;">
+        <div class="tab-badge">Gerar PEI</div>
+        <div class="serif" style="font-size:19px;font-weight:700;color:#B8860B;margin:8px 0 16px;">Plano Educacional Individualizado — ${esc(student.nome)}</div>
+
+        <div class="grid3">
+          <label class="field"><span>Modelo</span>
+            <select id="pei-modelo">
+              <option value="municipal" ${f.modelo==='municipal'?'selected':''}>Municipal (SEMECEL)</option>
+              <option value="estadual" ${f.modelo==='estadual'?'selected':''}>Estadual (SEDUC)</option>
+            </select>
+          </label>
+          <label class="field"><span>Segmento</span>
+            <select id="pei-segmento">
+              ${Object.entries(SEGMENT_AREAS).map(([k,v])=>`<option value="${k}" ${f.segmento===k?'selected':''}>${v.label}</option>`).join('')}
+            </select>
+          </label>
+          <label class="field"><span>Ano letivo</span><input type="number" id="pei-ano" value="${f.ano}" min="2024" max="2040"></label>
+        </div>
+
+        <div class="grid3" style="margin-top:12px;">
+          <label class="field"><span>Periodicidade</span>
+            <select id="pei-periodicidade">
+              <option value="quinzenal" ${f.periodicidade==='quinzenal'?'selected':''}>Quinzenal</option>
+              <option value="mensal" ${f.periodicidade==='mensal'?'selected':''}>Mensal</option>
+              <option value="bimestral" ${f.periodicidade==='bimestral'?'selected':''}>Bimestral</option>
+            </select>
+          </label>
+          <div id="pei-bim-wrap" style="display:${f.periodicidade==='bimestral'?'block':'none'};">
+            <label class="field"><span>Bimestre</span>
+              <select id="pei-bim">
+                ${[1,2,3,4].map(b=>`<option value="${b}" ${f.bim===b?'selected':''}>${b}º Bimestre</option>`).join('')}
+              </select>
+            </label>
+          </div>
+          <div id="pei-data-wrap" style="display:${f.periodicidade!=='bimestral'?'block':'none'};">
+            <label class="field"><span>Data de início</span><input type="date" id="pei-data-inicio" value="${f.dataInicio}"></label>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <span class="label-mini" style="color:#B8860B;">CID(s) do(a) estudante</span>
+          <div class="cid-check-grid" style="margin-top:8px;">
+            ${CID_LIST.map(c=>`
+              <label class="cid-check-item">
+                <input type="checkbox" data-cid-check value="${c.codigo}" ${f.cids.includes(c.codigo)?'checked':''}>
+                <span><strong>${c.codigo}</strong> — ${c.legenda}</span>
+              </label>
+            `).join('')}
+          </div>
+          <label class="field" style="margin-top:8px;"><span>CID adicional (se não estiver na lista)</span><input id="pei-cid-custom" value="${esc(f.cidCustom)}" placeholder="Ex: F84.9"></label>
+        </div>
+
+        <div class="grid2" style="margin-top:16px;">
+          <label class="field"><span>Potencialidades (habilidades já consolidadas)</span><textarea id="pei-potencialidades" style="min-height:70px;">${esc(f.potencialidades)}</textarea></label>
+          <label class="field"><span>Dificuldades / necessidades específicas</span><textarea id="pei-dificuldades" style="min-height:70px;">${esc(f.dificuldades)}</textarea></label>
+        </div>
+
+        <button class="btn btn-gold" id="btn-gerar-pei" style="width:100%; padding:11px 0; margin-top:18px;">Gerar PEI</button>
+      </div>
+
+      <div class="card printable-area" id="pei-output-wrap" style="display:none;">
+        <div class="no-print" style="display:flex; justify-content:space-between; margin-bottom:16px;">
+          <button class="btn" id="btn-back-pei">← Voltar ao caderno de campo</button>
+          <button class="btn btn-gold" id="btn-print-pei">🖨 Imprimir PEI</button>
+        </div>
+        <div class="ai-disclaimer no-print">⚙️ <span>Estrutura e texto pedagógico gerados automaticamente. Os campos de Habilidades BNCC (código) ficam em branco de propósito — preencha com os códigos oficiais correspondentes à turma e ao(à) estudante, consultando o documento da BNCC. Revise todo o conteúdo antes de oficializar.</span></div>
+        <div id="pei-output"></div>
+      </div>
+    </div>
+  `;
+}
+
+function buildPEIHTML(student, f){
+  const cidCodigos = [...f.cids];
+  if(f.cidCustom && f.cidCustom.trim()) cidCodigos.push(f.cidCustom.trim().toUpperCase());
+  const cidLegendas = cidCodigos.map(c=>{
+    const found = CID_LIST.find(x=>x.codigo===c);
+    return found ? `${found.codigo} — ${found.legenda}` : c;
+  });
+  const periodo = peiPeriodo(f.periodicidade, f.ano, f.bim, f.dataInicio);
+  const seg = SEGMENT_AREAS[f.segmento];
+  const cidTextos = cidCodigos.map(cidContext).filter(Boolean);
+
+  let html = `
+    <div style="text-align:center; margin-bottom:18px;">
+      <div class="serif" style="font-size:18px; font-weight:700;">PLANO EDUCACIONAL INDIVIDUALIZADO (PEI)</div>
+      <div style="font-size:12px; color:var(--dim);">${f.modelo==='municipal'?'Rede Municipal':'Rede Estadual'} · ${seg.label} · Ano letivo ${f.ano}</div>
+    </div>
+
+    <table class="pei-table">
+      <tr><th style="width:22%;">Aluno(a)</th><td>${esc(student.nome)}</td></tr>
+      <tr><th>Escola</th><td>${esc(student.escola)||''}</td></tr>
+      <tr><th>Série / turma</th><td>${esc(student.serie)||''}</td></tr>
+      <tr><th>CID(s) / legenda</th><td>${cidLegendas.map(esc).join('<br>')||'—'}</td></tr>
+      <tr><th>Docente responsável</th><td>${esc(currentUser().nome)}</td></tr>
+      <tr><th>Delimitação temporal</th><td>${periodo.label} — Início: ${fmtDateBR(periodo.start)} | Término: ${fmtDateBR(periodo.end)}${periodo.revisoes.length?` | 1ª Revisão: ${fmtDateBR(periodo.revisoes[0])} | 2ª Revisão: ${fmtDateBR(periodo.revisoes[1])}`:''}</td></tr>
+    </table>
+
+    <div class="label-mini" style="color:#B8860B; margin-bottom:6px;">Informações sobre o(a) estudante</div>
+    <textarea style="width:100%; min-height:90px; margin-bottom:16px;">${esc(cidTextos.join(' '))}</textarea>
+
+    <table class="pei-table">
+      <tr><th style="width:50%;">Potencialidades</th><th>Habilidades a serem desenvolvidas / Dificuldades</th></tr>
+      <tr><td><textarea>${esc(f.potencialidades)}</textarea></td><td><textarea>${esc(f.dificuldades)}</textarea></td></tr>
+    </table>
+
+    <table class="pei-table">
+      <tr><th>Necessidades educacionais específicas</th><th>Estratégias para auxiliar no desenvolvimento</th></tr>
+      ${['Comunicação','Interação','Brincadeiras / recreação','Higiene','Alimentação','Locomoção','Outras'].map(n=>`
+        <tr><td><strong>${n}</strong></td><td><textarea></textarea></td></tr>
+      `).join('')}
+    </table>
+  `;
+
+  seg.areas.forEach(area=>{
+    html += `<div class="pei-area-title">${esc(area.nome)}</div>`;
+    area.componentes.forEach(componente=>{
+      const bloco = gerarBlocoComponente(componente, cidCodigos.length?cidCodigos:['']);
+      html += `
+        <table class="pei-table">
+          <tr><th colspan="2">${esc(componente)}</th></tr>
+          <tr><th style="width:22%;">Unidades Temáticas</th><td><textarea>${esc(bloco.unidade)}</textarea></td></tr>
+          <tr><th>Objetos de Conhecimento</th><td><textarea></textarea></td></tr>
+          <tr><th>Objetivos de aprendizagem</th><td><textarea>${esc(bloco.objetivos)}</textarea></td></tr>
+          <tr><th>Habilidade BNCC (turma) — código</th><td><input placeholder="Ex: EF67LP08 — consulte a BNCC"></td></tr>
+          <tr><th>Habilidade BNCC (adaptada ao estudante) — código</th><td><input placeholder="Ex: EF15LP04 — consulte a BNCC"></td></tr>
+          <tr><th>Metodologia / Adaptações necessárias</th><td><textarea style="min-height:80px;">${esc(bloco.metodologia)}</textarea></td></tr>
+          <tr><th>Avaliação</th><td><textarea>${esc(bloco.avaliacao)}</textarea></td></tr>
+        </table>
+      `;
+    });
+  });
+
+  html += `
+    <div style="margin-top:30px; display:flex; flex-direction:column; gap:30px; font-size:12.5px; color:var(--dim);">
+      <div style="text-align:center;">__________________________________<br>Assinatura do(a) professor(a) regente</div>
+      <div style="text-align:center;">__________________________________<br>Assinatura da coordenação pedagógica</div>
+    </div>
+  `;
+
+  return html;
+}
+
+
 function renderUserManagement(){
   const escolasList = [...new Set(appData.users.map(u=>u.escola).filter(Boolean))].sort();
   const filtro = uiState.userEscolaFiltro || 'todas';
@@ -1728,6 +2007,34 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('btn-print-ficha')?.addEventListener('click', ()=> window.print());
   document.getElementById('btn-monthly-report')?.addEventListener('click', ()=>{ uiState.view='relatorio'; renderApp(); });
   document.getElementById('btn-pedagogico-report')?.addEventListener('click', ()=>{ uiState.view='pedagogico'; renderApp(); });
+  document.getElementById('btn-pei')?.addEventListener('click', ()=>{ uiState.view='pei'; renderApp(); });
+  document.getElementById('btn-back-pei')?.addEventListener('click', ()=>{ uiState.view='ficha'; renderApp(); });
+  document.getElementById('btn-print-pei')?.addEventListener('click', ()=> window.print());
+  document.getElementById('pei-periodicidade')?.addEventListener('change', (e)=>{
+    document.getElementById('pei-bim-wrap').style.display = e.target.value==='bimestral' ? 'block' : 'none';
+    document.getElementById('pei-data-wrap').style.display = e.target.value!=='bimestral' ? 'block' : 'none';
+  });
+  document.getElementById('btn-gerar-pei')?.addEventListener('click', ()=>{
+    const wrap = document.getElementById('pei-output-wrap');
+    if(wrap.style.display==='block' && !confirm('Isso vai substituir o PEI gerado atualmente na tela (as edições feitas nele serão perdidas). Continuar?')) return;
+    const cidsChecked = Array.from(document.querySelectorAll('[data-cid-check]:checked')).map(el=>el.value);
+    const f = {
+      modelo: document.getElementById('pei-modelo').value,
+      segmento: document.getElementById('pei-segmento').value,
+      periodicidade: document.getElementById('pei-periodicidade').value,
+      ano: parseInt(document.getElementById('pei-ano').value,10) || (new Date()).getFullYear(),
+      bim: parseInt(document.getElementById('pei-bim').value,10) || 1,
+      dataInicio: document.getElementById('pei-data-inicio').value || todayISO(),
+      cids: cidsChecked,
+      cidCustom: document.getElementById('pei-cid-custom').value,
+      potencialidades: document.getElementById('pei-potencialidades').value,
+      dificuldades: document.getElementById('pei-dificuldades').value,
+    };
+    uiState.peiForm = f;
+    document.getElementById('pei-output').innerHTML = buildPEIHTML(selected, f);
+    wrap.style.display = 'block';
+    wrap.scrollIntoView({behavior:'smooth'});
+  });
   document.getElementById('btn-back-calendar')?.addEventListener('click', ()=>{ uiState.view='ficha'; renderApp(); });
   document.getElementById('btn-back-calendar-p')?.addEventListener('click', ()=>{ uiState.view='ficha'; renderApp(); });
   document.getElementById('btn-print-report')?.addEventListener('click', ()=> window.print());
