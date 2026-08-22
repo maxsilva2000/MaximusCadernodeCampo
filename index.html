@@ -2295,16 +2295,10 @@ function wireAppListeners(selected, canEdit, isDev){
     document.getElementById('pei-bim-wrap').style.display = e.target.value==='bimestral' ? 'block' : 'none';
     document.getElementById('pei-data-wrap').style.display = e.target.value!=='bimestral' ? 'block' : 'none';
   });
-  document.getElementById('pei-segmento')?.addEventListener('change', (e)=>{
-    if(uiState.peiForm) uiState.peiForm.segmento = e.target.value;
-    if(uiState.peiForm) uiState.peiForm.componente = 'todas';
-    renderApp();
-  });
-  document.getElementById('btn-gerar-pei')?.addEventListener('click', ()=>{
-    const wrap = document.getElementById('pei-output-wrap');
-    if(wrap.style.display==='block' && !confirm('Isso vai substituir o PEI gerado atualmente na tela (as edições feitas nele serão perdidas). Continuar?')) return;
+
+  function readPeiFormFromDOM(){
     const cidsChecked = Array.from(document.querySelectorAll('[data-cid-check]:checked')).map(el=>el.value);
-    const f = {
+    return {
       modelo: document.getElementById('pei-modelo').value,
       segmento: document.getElementById('pei-segmento').value,
       componente: document.getElementById('pei-componente').value,
@@ -2317,6 +2311,46 @@ function wireAppListeners(selected, canEdit, isDev){
       potencialidades: document.getElementById('pei-potencialidades').value,
       dificuldades: document.getElementById('pei-dificuldades').value,
     };
+  }
+  function regenerateOutputIfVisible(){
+    const wrap = document.getElementById('pei-output-wrap');
+    if(wrap && wrap.style.display==='block'){
+      const f = readPeiFormFromDOM();
+      uiState.peiForm = f;
+      document.getElementById('pei-output').innerHTML = buildPEIHTML(selected, f);
+      wireAllBNCCPickers();
+      wireAllOptionPickers();
+    }
+  }
+
+  document.getElementById('pei-modelo')?.addEventListener('change', ()=>{
+    regenerateOutputIfVisible();
+  });
+  document.getElementById('pei-componente')?.addEventListener('change', ()=>{
+    regenerateOutputIfVisible();
+  });
+  document.getElementById('pei-segmento')?.addEventListener('change', (e)=>{
+    if(!uiState.peiForm) return;
+    uiState.peiForm.segmento = e.target.value;
+    uiState.peiForm.componente = 'todas';
+    const seg = SEGMENT_AREAS[uiState.peiForm.segmento];
+    const componenteSelect = document.getElementById('pei-componente');
+    if(componenteSelect){
+      componenteSelect.innerHTML = `
+        <option value="todas">— Documento completo (todas as áreas) —</option>
+        ${seg.areas.map(area=>`
+          <optgroup label="${esc(area.nome)}">
+            ${area.componentes.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+          </optgroup>
+        `).join('')}
+      `;
+    }
+    regenerateOutputIfVisible();
+  });
+  document.getElementById('btn-gerar-pei')?.addEventListener('click', ()=>{
+    const wrap = document.getElementById('pei-output-wrap');
+    if(wrap.style.display==='block' && !confirm('Isso vai substituir o PEI gerado atualmente na tela (as edições feitas nele serão perdidas). Continuar?')) return;
+    const f = readPeiFormFromDOM();
     uiState.peiForm = f;
     document.getElementById('pei-output').innerHTML = buildPEIHTML(selected, f);
     wireAllBNCCPickers();
