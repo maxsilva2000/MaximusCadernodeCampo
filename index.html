@@ -1010,6 +1010,7 @@ function renderAuthScreen(){
   if(authScreen==='login') return renderLoginScreen();
   if(authScreen==='signup-role') return renderSignupRoleChoice();
   if(authScreen==='signup') return renderSignupScreen();
+  if(authScreen==='signup-pending') return renderSignupPending();
   if(authScreen==='forgot') return renderForgotScreen();
   renderLoginScreen();
 }
@@ -1225,10 +1226,24 @@ function renderSignupSeguranca(){
       session.userId = user.id;
       authTemp={}; authScreen='login'; render();
     } else {
-      authTemp = { info: 'Sua conta foi criada com sucesso e está aguardando aprovação de um Desenvolvedor do sistema. Você poderá entrar assim que sua conta for aprovada.' };
-      authScreen='login'; render();
+      authTemp = { pendingNotifyUser: user };
+      authScreen='signup-pending'; render();
     }
   });
+}
+
+function renderSignupPending(){
+  const user = authTemp.pendingNotifyUser;
+  const msg = `Olá! Acabei de criar uma conta no Caderno de Campo Máximus.\nNome: ${user.nome}\nPerfil: ${ROLE_LABEL[user.role]}\nEscola: ${user.escola||'-'}\nPoderia aprovar meu acesso? Obrigado!`;
+  const waLink = `https://wa.me/5566996641404?text=${encodeURIComponent(msg)}`;
+  authShell(`
+    <div class="serif" style="text-align:center;font-size:17px;margin-bottom:6px;">Conta criada!</div>
+    <div class="auth-info">Sua conta foi criada com sucesso e está aguardando aprovação de um Desenvolvedor do sistema.</div>
+    <div style="font-size:13px; color:var(--dim); margin:14px 0; text-align:center;">Pra agilizar, avise o Desenvolvedor agora mesmo — a mensagem já vem pronta, é só enviar:</div>
+    <a href="${waLink}" target="_blank" rel="noopener" class="btn btn-gold" style="display:block; width:100%; padding:11px 0; text-align:center; text-decoration:none; box-sizing:border-box;">📱 Avisar pelo WhatsApp</a>
+    <button class="btn" id="btn-goto-login" style="width:100%; margin-top:12px;">Ir para o login</button>
+  `);
+  document.getElementById('btn-goto-login').addEventListener('click', ()=>{ authTemp={}; authScreen='login'; render(); });
 }
 
 function renderForgotScreen(){
