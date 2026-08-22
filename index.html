@@ -315,6 +315,12 @@ async function hashPassword(pw, salt){ return sha256Hex(salt+':'+pw); }
 async function hashAnswer(ans){ return sha256Hex((ans||'').trim().toLowerCase()); }
 // SHA-256 hash of the Developer master password — the plaintext is never stored in this file.
 const DEV_MASTER_HASH = '683f6f7ff446a1e57cdb0aca97173b40917886a9d768aa126f6ca6b28595830d';
+const MERCADOPAGO_LINK = 'https://mpago.li/23EckiX';
+const DIAS_ASSINATURA = 30;
+function diasRestantes(expiraTs){
+  if(!expiraTs) return null;
+  return Math.ceil((expiraTs - Date.now()) / (24*60*60*1000));
+}
 
 function validaCPF(cpfRaw){
   const cpf=(cpfRaw||'').replace(/\D/g,'');
@@ -540,6 +546,90 @@ function gerarParecerPEI(student, potenc, dific, periodoLabel){
   }
   texto += `Recomenda-se a continuidade do acompanhamento individualizado, com revisão periódica dos objetivos e das estratégias propostas, em articulação entre a equipe pedagógica, a família e os demais profissionais envolvidos no processo de desenvolvimento do(a) estudante.`;
   return texto;
+}
+
+/* ============ IA (Claude API — chave própria do usuário, direto do navegador) ============ */
+const ANTHROPIC_KEY_STORAGE = 'maximus-anthropic-key';
+function getAnthropicKey(){ return localStorage.getItem(ANTHROPIC_KEY_STORAGE) || ''; }
+function setAnthropicKey(k){ if(k) localStorage.setItem(ANTHROPIC_KEY_STORAGE, k); else localStorage.removeItem(ANTHROPIC_KEY_STORAGE); }
+
+async function chamarClaudeIA(promptTexto){
+  const key = getAnthropicKey();
+  if(!key) throw new Error('NO_KEY');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1600,
+      messages: [{ role: 'user', content: promptTexto }],
+    }),
+  });
+  if(!res.ok){
+    const errText = await res.text().catch(()=> '');
+    throw new Error('API_ERROR:' + res.status + ':' + errText.slice(0,300));
+  }
+  const data = await res.json();
+  return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+}
+
+function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStart, periodoEnd){
+  const sorted = entries.slice().sort((a,b)=> a.data<b.data?-1:1);
+  const registros = sorted.map(e=>{
+    let linha = `${fmtDateBR(e.data)} (${weekdayBR(e.data)}): `;
+    if(!e.presente) return linha + 'Falta.';
+    linha += `Presente, chegada ${e.chegada||'-'}, saída ${e.saida||'-'}.`;
+    if(e.atividades && e.atividades.length){
+      linha += ' Atividades: ' + e.atividades.map(a=>`${a.descricao||'atividade'} (${STATUS[a.status]?.label})`).join('; ') + '.';
+    }
+    if(e.desenvolvimento && e.desenvolvimento.trim()) linha += ' Observações: ' + e.desenvolvimento.trim();
+    return linha;
+  }).join('\n');
+
+  return `Você é um profissional de educação especial brasileiro escrevendo um relatório pedagógico bimestral oficial, no mesmo estilo de relatórios reais de acompanhamento especializado: narrativo, específico, baseado nos registros reais, evitando frases genéricas ou clichês.
+
+DADOS DO ALUNO:
+Nome: ${student.nome}
+Série/turma: ${student.serie||'-'}
+Escola: ${student.escola||'-'}
+CID: ${student.cid||'não informado'}
+Período: ${bim}º Bimestre de ${ano} (${fmtDateBR(periodoStart)} a ${fmtDateBR(periodoEnd)})
+
+REGISTROS DO CADERNO DE CAMPO NO PERÍODO (use estes registros reais como base — não invente informações que não estejam aqui):
+${registros || '(nenhum registro encontrado neste período)'}
+
+INSTRUÇÕES:
+- Escreva um relatório corrido (não uma lista de tópicos), com parágrafos que contam a evolução do período.
+- NUNCA escreva frases como "trata-se de aluno com deficiência X" — o diagnóstico já está identificado em outro lugar do documento.
+- Ao falar de frequência, use termos qualitativos (ex: "frequência regular", "frequência irregular") em vez de listar datas específicas de falta.
+- Traga observações específicas e concretas dos registros reais, não generalidades.
+- Se houver evolução perceptível ao longo do período (comportamento, engajamento, autonomia, vínculo), narre essa evolução.
+- Termine com considerações finais e recomendações objetivas para o próximo período.
+- Português do Brasil, tom profissional pedagógico, texto corrido em parágrafos, sem markdown, sem títulos numerados.
+- Não invente fatos que não estejam nos registros fornecidos.`;
+}
+
+function montarPromptParecerPEI(student, potenc, dific, periodoLabel, cidLegendas){
+  return `Você é um profissional de educação especial brasileiro escrevendo o "Parecer (Relatório Semestral)" de um Plano Educacional Individualizado (PEI) oficial.
+
+DADOS DO ALUNO:
+Nome: ${student.nome}
+CID/condição: ${cidLegendas.join('; ')||'não informado'}
+Período de referência: ${periodoLabel}
+Potencialidades observadas: ${potenc}
+Dificuldades/necessidades: ${dific||'não informadas'}
+
+INSTRUÇÕES:
+- Escreva um parecer narrativo e específico, no estilo de relatórios reais de acompanhamento especializado — não um texto genérico.
+- NUNCA repita o diagnóstico como "trata-se de aluno com deficiência X".
+- Baseie-se apenas nas informações fornecidas, sem inventar fatos.
+- Termine com recomendações objetivas para a continuidade do plano.
+- Português do Brasil, tom profissional pedagógico, texto corrido em parágrafos, sem markdown.`;
 }
 
 function gerarRelatorioPedagogico(student, entries, bim, year){
@@ -1072,6 +1162,10 @@ async function doLogin(){
     authTemp = {loginRole:selectedRole, error:'Sua conta ainda está aguardando aprovação de um Desenvolvedor do sistema. Procure o Desenvolvedor responsável para liberar seu acesso.'};
     render(); return;
   }
+  if(user.pagamentoExpira && Date.now() > user.pagamentoExpira){
+    authTemp = {loginRole:selectedRole, error:'Sua assinatura venceu (30 dias a partir do último pagamento). Realize um novo pagamento pelo Mercado Pago e avise o Desenvolvedor para renovar seu acesso.'};
+    render(); return;
+  }
   const remember = document.getElementById('li-remember')?.checked;
   if(remember){ localStorage.setItem('maximus-remember-id', idn); }
   else { localStorage.removeItem('maximus-remember-id'); }
@@ -1179,7 +1273,7 @@ function renderSignupDados(){
       const passHash = await hashPassword(senha, salt);
       authTemp = {
         step:'seguranca',
-        pendingUser: { id:uid(), nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal, salt, passHash, role:targetRole, status: targetRole==='desenvolvedor'?'ativo':'pendente', securityQuestion:'', securityAnswerHash:'', createdAt:Date.now() },
+        pendingUser: { id:uid(), nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal, salt, passHash, role:targetRole, status: targetRole==='desenvolvedor'?'ativo':'pendente', pagamentoConfirmado: targetRole==='desenvolvedor', securityQuestion:'', securityAnswerHash:'', createdAt:Date.now() },
       };
       render();
     })();
@@ -1238,8 +1332,10 @@ function renderSignupPending(){
   const waLink = `https://wa.me/5566996641404?text=${encodeURIComponent(msg)}`;
   authShell(`
     <div class="serif" style="text-align:center;font-size:17px;margin-bottom:6px;">Conta criada!</div>
-    <div class="auth-info">Sua conta foi criada com sucesso e está aguardando aprovação de um Desenvolvedor do sistema.</div>
-    <div style="font-size:13px; color:var(--dim); margin:14px 0; text-align:center;">Pra agilizar, avise o Desenvolvedor agora mesmo — a mensagem já vem pronta, é só enviar:</div>
+    <div class="auth-info">Sua conta foi criada com sucesso. Para ativar o acesso, é necessário pagar a assinatura e aguardar a aprovação de um Desenvolvedor do sistema.</div>
+    <div style="font-size:13px; color:var(--dim); margin:14px 0; text-align:center;">1. Pague sua assinatura:</div>
+    <a href="${MERCADOPAGO_LINK}" target="_blank" rel="noopener" class="btn btn-gold" style="display:block; width:100%; padding:11px 0; text-align:center; text-decoration:none; box-sizing:border-box;">💳 Pagar assinatura (Mercado Pago)</a>
+    <div style="font-size:13px; color:var(--dim); margin:14px 0; text-align:center;">2. Avise o Desenvolvedor que você pagou — a mensagem já vem pronta:</div>
     <a href="${waLink}" target="_blank" rel="noopener" class="btn btn-gold" style="display:block; width:100%; padding:11px 0; text-align:center; text-decoration:none; box-sizing:border-box;">📱 Avisar pelo WhatsApp</a>
     <button class="btn" id="btn-goto-login" style="width:100%; margin-top:12px;">Ir para o login</button>
   `);
@@ -1668,7 +1764,10 @@ function renderPedagogicoReport(student){
         `).join('')}
       </div>
 
-      <div class="label-mini" style="font-size:11px;color:#B8860B;margin-bottom:8px;">Relatório pedagógico (editável)</div>
+      <div class="no-print" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="label-mini" style="font-size:11px;color:#B8860B;">Relatório pedagógico (editável)</div>
+        <button class="btn btn-gold" id="btn-ia-relatorio">🤖 Gerar com IA (Claude)</button>
+      </div>
       <textarea id="pedagogico-text" style="min-height:340px; font-size:13.5px; line-height:1.6; resize:vertical;">${esc(gerado.texto)}</textarea>
 
       <div id="pedagogico-photos-section" style="display:none; margin-top:20px;">
@@ -2028,8 +2127,11 @@ function buildPEIHTML(student, f){
         </tr>
       </table>
       <div class="pei-area-title">Parecer (Relatório Semestral)</div>
-      <div class="ai-disclaimer no-print">⚙️ <span>Parecer gerado automaticamente com base nas potencialidades, dificuldades e período informados. Revise e ajuste antes de utilizar.</span></div>
-      <table class="pei-table"><tr><td><textarea style="min-height:120px;">${esc(parecerTexto)}</textarea></td></tr></table>
+      <div class="no-print" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="ai-disclaimer" style="margin-bottom:0; flex:1; margin-right:10px;">⚙️ <span>Parecer gerado automaticamente com base nas potencialidades, dificuldades e período informados. Revise e ajuste antes de utilizar.</span></div>
+        <button class="btn btn-gold" id="btn-ia-parecer" style="white-space:nowrap;">🤖 Gerar com IA</button>
+      </div>
+      <table class="pei-table"><tr><td><textarea id="pei-parecer-text" style="min-height:120px;">${esc(parecerTexto)}</textarea></td></tr></table>
     `;
   }
 
@@ -2068,10 +2170,11 @@ function renderUserManagement(){
           `:''}
         </div>
         <table class="users-table">
-          <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>CPF</th><th>Escola</th><th>Papel</th><th>Status</th><th>Ações</th></tr></thead>
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>CPF</th><th>Escola</th><th>Papel</th><th>Status</th><th>Pagamento</th><th>Ações</th></tr></thead>
           <tbody>
             ${usersFiltrados.map(u=>{
               const pendente = u.status && u.status!=='ativo';
+              const isDevUser = u.role==='desenvolvedor';
               return `
               <tr ${pendente?'style="background:#FBF1DA;"':''}>
                 <td>${esc(u.nome)}</td>
@@ -2087,6 +2190,22 @@ function renderUserManagement(){
                   </select>
                 </td>
                 <td>${pendente?'⏳ Pendente':'✅ Ativo'}</td>
+                <td style="white-space:nowrap;">
+                  ${isDevUser ? '—' : (()=>{
+                    const dias = diasRestantes(u.pagamentoExpira);
+                    const vencido = dias!==null && dias<0;
+                    let statusTxt;
+                    if(dias===null) statusTxt = '⏳ Não pago';
+                    else if(vencido) statusTxt = `❌ Venceu há ${Math.abs(dias)} dia(s)`;
+                    else statusTxt = `✅ Válido por ${dias} dia(s) (até ${fmtDateBR(new Date(u.pagamentoExpira).toISOString().slice(0,10))})`;
+                    const btnLabel = (dias===null || vencido) ? 'Marcar como pago (30 dias)' : 'Renovar +30 dias';
+                    return `
+                      <span style="display:block; margin-bottom:4px;">${statusTxt}</span>
+                      <button class="btn" data-pay-user="${u.id}">${btnLabel}</button>
+                      ${dias!==null?`<button class="btn btn-danger" data-revoke-user="${u.id}" style="margin-left:4px;">Revogar</button>`:''}
+                    `;
+                  })()}
+                </td>
                 <td style="white-space:nowrap;">
                   ${pendente?`<button class="btn btn-gold" data-approve-user="${u.id}" style="margin-right:4px;">Aprovar</button>`:''}
                   <button class="btn" data-reset-pw="${u.id}" style="margin-right:4px;">Redefinir senha</button>
@@ -2202,8 +2321,34 @@ function wireAppListeners(selected, canEdit, isDev){
   document.querySelectorAll('[data-approve-user]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const u = appData.users.find(x=>x.id===btn.dataset.approveUser);
-      if(!confirm(`Aprovar o acesso de ${u.nome} como ${ROLE_LABEL[u.role]}${u.escola?` na escola ${u.escola}`:''}?`)) return;
+      const dias = diasRestantes(u.pagamentoExpira);
+      const semPagamentoValido = dias===null || dias<0;
+      if(semPagamentoValido){
+        if(!confirm(`⚠️ ${u.nome} ainda não tem um pagamento válido registrado. Aprovar o acesso mesmo assim?`)) return;
+      } else {
+        if(!confirm(`Aprovar o acesso de ${u.nome} como ${ROLE_LABEL[u.role]}${u.escola?` na escola ${u.escola}`:''}?`)) return;
+      }
       u.status = 'ativo';
+      persist(); renderApp();
+    });
+  });
+  document.querySelectorAll('[data-pay-user]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const u = appData.users.find(x=>x.id===btn.dataset.payUser);
+      const dias = diasRestantes(u.pagamentoExpira);
+      const base = (dias!==null && dias>0) ? u.pagamentoExpira : Date.now();
+      u.pagamentoData = Date.now();
+      u.pagamentoExpira = base + DIAS_ASSINATURA*24*60*60*1000;
+      u.pagamentoConfirmado = true;
+      persist(); renderApp();
+    });
+  });
+  document.querySelectorAll('[data-revoke-user]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const u = appData.users.find(x=>x.id===btn.dataset.revokeUser);
+      if(!confirm(`Revogar o pagamento de ${u.nome}? Isso vai bloquear o acesso dela(e) até um novo pagamento ser registrado.`)) return;
+      u.pagamentoConfirmado = false;
+      u.pagamentoExpira = null;
       persist(); renderApp();
     });
   });
@@ -2312,6 +2457,30 @@ function wireAppListeners(selected, canEdit, isDev){
       dificuldades: document.getElementById('pei-dificuldades').value,
     };
   }
+  function wireIAParecerButton(){
+    document.getElementById('btn-ia-parecer')?.addEventListener('click', async ()=>{
+      const btn = document.getElementById('btn-ia-parecer');
+      const f = uiState.peiForm;
+      if(!f) return;
+      const cidCodigos = [...f.cids];
+      if(f.cidCustom && f.cidCustom.trim()) cidCodigos.push(f.cidCustom.trim().toUpperCase());
+      const cidLegendas = cidCodigos.map(c=>{ const found = CID_LIST.find(x=>x.codigo===c); return found?`${found.codigo} — ${found.legenda}`:c; });
+      const periodo = peiPeriodo(f.periodicidade, f.ano, f.bim, f.dataInicio);
+      const potenc = (f.potencialidades && f.potencialidades.trim()) || GENERIC_POTENCIALIDADE;
+      const prompt = montarPromptParecerPEI(selected, potenc, f.dificuldades, periodo.label, cidLegendas);
+      btn.disabled = true; btn.textContent = 'Gerando…';
+      try{
+        const texto = await chamarClaudeIA(prompt);
+        document.getElementById('pei-parecer-text').value = texto;
+      }catch(e){
+        if(e.message==='NO_KEY') alert('Configure sua chave de API da Anthropic em "Gerenciar usuários" antes de usar essa opção.');
+        else alert('Erro ao gerar com IA: ' + e.message);
+      }finally{
+        btn.disabled = false; btn.textContent = '🤖 Gerar com IA';
+      }
+    });
+  }
+
   function regenerateOutputIfVisible(){
     const wrap = document.getElementById('pei-output-wrap');
     if(wrap && wrap.style.display==='block'){
@@ -2320,6 +2489,7 @@ function wireAppListeners(selected, canEdit, isDev){
       document.getElementById('pei-output').innerHTML = buildPEIHTML(selected, f);
       wireAllBNCCPickers();
       wireAllOptionPickers();
+      wireIAParecerButton();
     }
   }
 
@@ -2362,6 +2532,24 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('btn-back-calendar-p')?.addEventListener('click', ()=>{ uiState.view='ficha'; renderApp(); });
   document.getElementById('btn-print-report')?.addEventListener('click', ()=> window.print());
   document.getElementById('btn-print-pedagogico')?.addEventListener('click', ()=> window.print());
+  document.getElementById('btn-ia-relatorio')?.addEventListener('click', async ()=>{
+    const btn = document.getElementById('btn-ia-relatorio');
+    const [start,end] = bimestreRange(uiState.bimYear, uiState.bim);
+    const entries = (appData.entries[selected.id]||[]).filter(e=> e.data>=start && e.data<=end);
+    const prompt = montarPromptRelatorioPedagogico(selected, entries, uiState.bim, uiState.bimYear, start, end);
+    btn.disabled = true; btn.textContent = 'Gerando…';
+    try{
+      const texto = await chamarClaudeIA(prompt);
+      const ta = document.getElementById('pedagogico-text');
+      ta.value = texto;
+      ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
+    }catch(e){
+      if(e.message==='NO_KEY') alert('Configure sua chave de API da Anthropic em "Gerenciar usuários" antes de usar essa opção.');
+      else alert('Erro ao gerar com IA: ' + e.message);
+    }finally{
+      btn.disabled = false; btn.textContent = '🤖 Gerar com IA (Claude)';
+    }
+  });
   document.getElementById('bim-prev')?.addEventListener('click', ()=>{
     if(uiState.bim===1){ uiState.bim=4; uiState.bimYear--; } else uiState.bim--;
     renderApp();
