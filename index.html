@@ -1030,6 +1030,17 @@ function migrateAppData(){
 
 let firstLoadDone = false;
 
+function tentarRestaurarSessao(){
+  if(session.userId) return; // already logged in this tab
+  const savedId = localStorage.getItem('maximus-session-userid');
+  if(!savedId) return;
+  const user = appData.users.find(u=>u.id===savedId);
+  if(!user){ localStorage.removeItem('maximus-session-userid'); return; }
+  if(user.status && user.status!=='ativo'){ localStorage.removeItem('maximus-session-userid'); return; }
+  if(user.pagamentoExpira && Date.now() > user.pagamentoExpira){ localStorage.removeItem('maximus-session-userid'); return; }
+  session.userId = user.id;
+}
+
 async function initApp(){
   const minWait = new Promise(r=>setTimeout(r, 550));
 
@@ -1045,6 +1056,7 @@ async function initApp(){
       migrateAppData();
       saveStatus = 'ok';
     }
+    tentarRestaurarSessao();
     await minWait;
     render();
     hideSplash();
@@ -1070,6 +1082,7 @@ async function initApp(){
     if(!firstLoadDone){
       clearTimeout(safetyTimeout);
       firstLoadDone = true;
+      tentarRestaurarSessao();
       minWait.then(()=>{ render(); hideSplash(); });
     } else {
       withFocusPreserved(()=> render());
@@ -1145,7 +1158,7 @@ function roleTabsHTML(current){
 function renderLoginScreen(){
   const noUsers = appData.users.length===0;
   const role = authTemp.loginRole || 'professor';
-  const remembered = localStorage.getItem('maximus-remember-id') || '';
+  const remembered = localStorage.getItem('maximus-remember-id-'+role) || '';
   authShell(`
     <div class="serif" style="text-align:center;font-size:17px;margin-bottom:14px;">Caderno de Campo</div>
     ${authTemp.error?`<div class="auth-error">${esc(authTemp.error)}</div>`:''}
@@ -1199,8 +1212,9 @@ async function doLogin(){
     render(); return;
   }
   const remember = document.getElementById('li-remember')?.checked;
-  if(remember){ localStorage.setItem('maximus-remember-id', idn); }
-  else { localStorage.removeItem('maximus-remember-id'); }
+  if(remember){ localStorage.setItem('maximus-remember-id-'+selectedRole, idn); }
+  else { localStorage.removeItem('maximus-remember-id-'+selectedRole); }
+  localStorage.setItem('maximus-session-userid', user.id);
   session.userId = user.id; authTemp={}; authScreen='login'; render();
 }
 
@@ -2349,6 +2363,7 @@ function wireAppListeners(selected, canEdit, isDev){
 
   document.getElementById('btn-logout')?.addEventListener('click', ()=>{
     session.userId=null;
+    localStorage.removeItem('maximus-session-userid');
     uiState={ selectedId:null, search:'', escolaFiltro:'todas', userEscolaFiltro:'todas', calYear:(new Date()).getFullYear(), calMonth:(new Date()).getMonth(), bimYear:(new Date()).getFullYear(), bim:getBimestre(new Date()), view:'ficha', sidebarOpen:false };
     authScreen='login'; authTemp={loginRole:'professor'}; render();
   });
