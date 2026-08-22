@@ -1067,6 +1067,10 @@ async function doLogin(){
     authTemp={loginRole:selectedRole, error:`Esta conta não tem acesso de ${ROLE_LABEL[selectedRole]}. Sua conta está cadastrada como ${ROLE_LABEL[user.role]}.`};
     render(); return;
   }
+  if(user.status && user.status !== 'ativo'){
+    authTemp = {loginRole:selectedRole, error:'Sua conta ainda está aguardando aprovação de um Desenvolvedor do sistema. Procure o Desenvolvedor responsável para liberar seu acesso.'};
+    render(); return;
+  }
   const remember = document.getElementById('li-remember')?.checked;
   if(remember){ localStorage.setItem('maximus-remember-id', idn); }
   else { localStorage.removeItem('maximus-remember-id'); }
@@ -1174,7 +1178,7 @@ function renderSignupDados(){
       const passHash = await hashPassword(senha, salt);
       authTemp = {
         step:'seguranca',
-        pendingUser: { id:uid(), nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal, salt, passHash, role:targetRole, securityQuestion:'', securityAnswerHash:'', createdAt:Date.now() },
+        pendingUser: { id:uid(), nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal, salt, passHash, role:targetRole, status: targetRole==='desenvolvedor'?'ativo':'pendente', securityQuestion:'', securityAnswerHash:'', createdAt:Date.now() },
       };
       render();
     })();
@@ -1217,8 +1221,13 @@ function renderSignupSeguranca(){
     user.securityAnswerHash = await hashAnswer(answer);
     appData.users.push(user);
     persist();
-    session.userId = user.id;
-    authTemp={}; authScreen='login'; render();
+    if(user.status === 'ativo'){
+      session.userId = user.id;
+      authTemp={}; authScreen='login'; render();
+    } else {
+      authTemp = { info: 'Sua conta foi criada com sucesso e está aguardando aprovação de um Desenvolvedor do sistema. Você poderá entrar assim que sua conta for aprovada.' };
+      authScreen='login'; render();
+    }
   });
 }
 
@@ -2020,6 +2029,64 @@ function buildPEIHTML(student, f){
 }
 
 
+function renderUserManagement(){
+  const escolasList = [...new Set(appData.users.map(u=>u.escola).filter(Boolean))].sort();
+  const filtro = uiState.userEscolaFiltro || 'todas';
+  const usersFiltrados = filtro==='todas' ? appData.users : appData.users.filter(u=>u.escola===filtro);
+  const pendentes = appData.users.filter(u=>u.status && u.status!=='ativo');
+  return `
+    <div class="main-panel">
+      ${pendentes.length>0?`
+        <div class="ai-disclaimer" style="background:#FBF1DA; border-color:#E9D9A8; color:#6B4A00;">
+          ⚠️ <span><strong>${pendentes.length} conta(s) aguardando aprovação.</strong> Novas contas de Professor/Auxiliar e Gestor só ganham acesso depois que você aprovar aqui embaixo.</span>
+        </div>
+      `:''}
+      <div class="card">
+        <div class="tab-badge">Gerenciar usuários</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin:8px 0 16px;">
+          <div class="serif" style="font-size:20px;font-weight:700;color:#B8860B;">Contas do sistema</div>
+          ${escolasList.length>0?`
+            <select id="user-escola-filter" style="width:auto; font-size:12.5px; padding:6px 8px;">
+              <option value="todas" ${filtro==='todas'?'selected':''}>Todas as escolas</option>
+              ${escolasList.map(e=>`<option value="${esc(e)}" ${filtro===e?'selected':''}>${esc(e)}</option>`).join('')}
+            </select>
+          `:''}
+        </div>
+        <table class="users-table">
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>CPF</th><th>Escola</th><th>Papel</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>
+            ${usersFiltrados.map(u=>{
+              const pendente = u.status && u.status!=='ativo';
+              return `
+              <tr ${pendente?'style="background:#FBF1DA;"':''}>
+                <td>${esc(u.nome)}</td>
+                <td>${esc(u.email)}</td>
+                <td>${fmtPhone(u.telefone)}</td>
+                <td>${fmtCPF(u.cpf)}</td>
+                <td>${esc(u.escola)||'—'}</td>
+                <td>
+                  <select data-role-select="${u.id}" style="width:auto; padding:5px 8px; font-size:12.5px;">
+                    <option value="professor" ${u.role==='professor'?'selected':''}>Professor/Auxiliar</option>
+                    <option value="gestor" ${u.role==='gestor'?'selected':''}>Gestor</option>
+                    <option value="desenvolvedor" ${u.role==='desenvolvedor'?'selected':''}>Desenvolvedor</option>
+                  </select>
+                </td>
+                <td>${pendente?'⏳ Pendente':'✅ Ativo'}</td>
+                <td style="white-space:nowrap;">
+                  ${pendente?`<button class="btn btn-gold" data-approve-user="${u.id}" style="margin-right:4px;">Aprovar</button>`:''}
+                  <button class="btn" data-reset-pw="${u.id}" style="margin-right:4px;">Redefinir senha</button>
+                  <button class="btn" data-reset-question="${u.id}" style="margin-right:4px;">Redefinir pergunta</button>
+                  ${u.id!==session.userId?`<button class="btn btn-danger" data-delete-user="${u.id}">Excluir</button>`:''}
+                </td>
+              </tr>
+            `;}).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 function renderEscolasManagement(){
   const totalMunicipais = appData.escolas.filter(e=>e.rede==='municipal').length;
   const totalEstaduais = appData.escolas.filter(e=>e.rede==='estadual').length;
@@ -2115,6 +2182,14 @@ function wireAppListeners(selected, canEdit, isDev){
         if(!confirm('Você está removendo seu próprio acesso de Desenvolvedor. Deseja continuar?')){ renderApp(); return; }
       }
       u.role = sel.value; persist(); renderApp();
+    });
+  });
+  document.querySelectorAll('[data-approve-user]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const u = appData.users.find(x=>x.id===btn.dataset.approveUser);
+      if(!confirm(`Aprovar o acesso de ${u.nome} como ${ROLE_LABEL[u.role]}${u.escola?` na escola ${u.escola}`:''}?`)) return;
+      u.status = 'ativo';
+      persist(); renderApp();
     });
   });
   document.querySelectorAll('[data-reset-pw]').forEach(btn=>{
