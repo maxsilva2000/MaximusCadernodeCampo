@@ -194,6 +194,9 @@
     .printable-area{background:#fff !important; border:none !important; color:#111 !important;}
     .printable-area *{color:#111 !important; background:transparent !important; border-color:#ccc !important;}
     .entry-card{break-inside:avoid;}
+    textarea{overflow:visible !important; resize:none !important;}
+    table.pei-table{break-inside:auto;}
+    table.pei-table tr{break-inside:avoid;}
   }
 </style>
 </head>
@@ -2575,6 +2578,15 @@ function wireAppListeners(selected, canEdit, isDev){
     });
   }
 
+  function autosizeAllTextareas(containerId){
+    const container = document.getElementById(containerId) || document;
+    container.querySelectorAll('textarea').forEach(ta=>{
+      const resize = ()=>{ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; };
+      resize();
+      ta.addEventListener('input', resize);
+    });
+  }
+
   function regenerateOutputIfVisible(){
     const wrap = document.getElementById('pei-output-wrap');
     if(wrap && wrap.style.display==='block'){
@@ -2584,6 +2596,7 @@ function wireAppListeners(selected, canEdit, isDev){
       wireAllBNCCPickers();
       wireAllOptionPickers();
       wireIAParecerButton();
+      autosizeAllTextareas('pei-output');
     }
   }
 
@@ -2619,6 +2632,8 @@ function wireAppListeners(selected, canEdit, isDev){
     document.getElementById('pei-output').innerHTML = buildPEIHTML(selected, f);
     wireAllBNCCPickers();
     wireAllOptionPickers();
+    wireIAParecerButton();
+    autosizeAllTextareas('pei-output');
     wrap.style.display = 'block';
     wrap.scrollIntoView({behavior:'smooth'});
   });
