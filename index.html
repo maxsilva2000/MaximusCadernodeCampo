@@ -610,10 +610,21 @@ const IA_PROVIDER_STORAGE = 'maximus-ia-provider';
 function getIAProvider(){ return localStorage.getItem(IA_PROVIDER_STORAGE) || 'claude'; }
 function setIAProvider(p){ localStorage.setItem(IA_PROVIDER_STORAGE, p); }
 
-async function chamarIA(promptTexto){
+async function chamarIA(promptTexto, tentativa){
+  tentativa = tentativa || 1;
   const provider = getIAProvider();
-  if(provider === 'gemini') return chamarGeminiIA(promptTexto);
-  return chamarClaudeIA(promptTexto);
+  try{
+    if(provider === 'gemini') return await chamarGeminiIA(promptTexto);
+    return await chamarClaudeIA(promptTexto);
+  }catch(e){
+    const msg = e.message || '';
+    const transitorio = msg.includes('API_ERROR:503') || msg.includes('API_ERROR:429');
+    if(transitorio && tentativa < 3){
+      await new Promise(r=>setTimeout(r, 1500*tentativa));
+      return chamarIA(promptTexto, tentativa+1);
+    }
+    throw e;
+  }
 }
 
 function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStart, periodoEnd){
