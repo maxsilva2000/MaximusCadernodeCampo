@@ -670,6 +670,35 @@ INSTRUÇÕES:
 - Português do Brasil, tom profissional pedagógico, texto corrido em parágrafos, sem markdown.`;
 }
 
+function montarPromptComponentePEI(componente, cidLegendas, potenc, dific){
+  return `Você é um profissional de educação especial brasileiro elaborando a parte de "${componente}" dentro de um Plano Educacional Individualizado (PEI) oficial.
+
+DADOS DO ALUNO:
+CID/condição: ${cidLegendas.join('; ')||'não informado'}
+Potencialidades observadas: ${potenc}
+Dificuldades/necessidades: ${dific||'não informadas'}
+
+Escreva o conteúdo de 3 seções para o componente curricular "${componente}", de forma específica e adaptada — nunca genérica, nunca repetindo o diagnóstico como "trata-se de aluno com deficiência X". Responda EXATAMENTE neste formato, com estes marcadores exatos, sem markdown:
+
+===OBJETIVOS===
+(objetivos de aprendizagem para ${componente}, adaptados às necessidades do(a) estudante)
+===METODOLOGIA===
+(metodologia, recursos didáticos e adaptações necessárias para ${componente})
+===AVALIACAO===
+(como será avaliado o desenvolvimento do(a) estudante em ${componente})`;
+}
+
+function parseRespostaComponentePEI(texto){
+  const objMatch = texto.match(/===OBJETIVOS===([\s\S]*?)(===METODOLOGIA===|$)/);
+  const metMatch = texto.match(/===METODOLOGIA===([\s\S]*?)(===AVALIACAO===|$)/);
+  const avalMatch = texto.match(/===AVALIACAO===([\s\S]*)$/);
+  return {
+    objetivos: objMatch ? objMatch[1].trim() : '',
+    metodologia: metMatch ? metMatch[1].trim() : '',
+    avaliacao: avalMatch ? avalMatch[1].trim() : '',
+  };
+}
+
 function gerarRelatorioPedagogico(student, entries, bim, year){
   const [start,end] = bimestreRange(year, bim);
   const sorted = entries.slice().sort((a,b)=> a.data<b.data?-1:1);
@@ -1383,13 +1412,22 @@ function renderSignupPending(){
   const msg = `Olá! Acabei de criar uma conta no Caderno de Campo Máximus.\nNome: ${user.nome}\nPerfil: ${ROLE_LABEL[user.role]}\nEscola: ${user.escola||'-'}\nPoderia aprovar meu acesso? Obrigado!`;
   const waLink = `https://wa.me/5566996641404?text=${encodeURIComponent(msg)}`;
   authShell(`
-    <div class="serif" style="text-align:center;font-size:17px;margin-bottom:6px;">Conta criada!</div>
-    <div class="auth-info">Sua conta foi criada com sucesso. Para ativar o acesso, é necessário pagar a assinatura e aguardar a aprovação de um Desenvolvedor do sistema.</div>
-    <div style="font-size:13px; color:var(--dim); margin:14px 0; text-align:center;">1. Pague sua assinatura:</div>
-    <a href="${MERCADOPAGO_LINK}" target="_blank" rel="noopener" class="btn btn-gold" style="display:block; width:100%; padding:11px 0; text-align:center; text-decoration:none; box-sizing:border-box;">💳 Pagar assinatura (Mercado Pago)</a>
-    <div style="font-size:13px; color:var(--dim); margin:14px 0; text-align:center;">2. Avise o Desenvolvedor que você pagou — a mensagem já vem pronta:</div>
-    <a href="${waLink}" target="_blank" rel="noopener" class="btn btn-gold" style="display:block; width:100%; padding:11px 0; text-align:center; text-decoration:none; box-sizing:border-box;">📱 Avisar pelo WhatsApp</a>
-    <button class="btn" id="btn-goto-login" style="width:100%; margin-top:12px;">Ir para o login</button>
+    <div class="serif" style="text-align:center;font-size:19px;margin-bottom:6px;">🎉 Conta criada!</div>
+    <div class="auth-info" style="text-align:center;">Faltam só 2 passos rápidos para liberar seu acesso.</div>
+
+    <div style="border:2px solid #C9A227; border-radius:14px; padding:18px; margin:18px 0 14px; background:linear-gradient(135deg,#FFFBF0,#FFF3D6);">
+      <div style="font-size:13px; font-weight:800; color:#9C7209; letter-spacing:.5px; text-transform:uppercase; margin-bottom:10px; text-align:center;">Passo 1 de 2</div>
+      <a href="${MERCADOPAGO_LINK}" target="_blank" rel="noopener" style="display:block; width:100%; padding:18px 0; text-align:center; text-decoration:none; box-sizing:border-box; background:linear-gradient(180deg,#EFD583,#C9A227); color:#241c06; font-weight:800; font-size:17px; border-radius:10px; border:2px solid #9C7209; box-shadow:0 4px 14px rgba(201,162,39,.35);">💳 PAGAR ASSINATURA</a>
+      <div style="font-size:11.5px; color:#8a7332; text-align:center; margin-top:8px;">via Mercado Pago</div>
+    </div>
+
+    <div style="border:2px solid #25D366; border-radius:14px; padding:18px; margin-bottom:16px; background:#EAFBF1;">
+      <div style="font-size:13px; font-weight:800; color:#1B7A43; letter-spacing:.5px; text-transform:uppercase; margin-bottom:10px; text-align:center;">Passo 2 de 2</div>
+      <a href="${waLink}" target="_blank" rel="noopener" style="display:block; width:100%; padding:18px 0; text-align:center; text-decoration:none; box-sizing:border-box; background:#25D366; color:#fff; font-weight:800; font-size:17px; border-radius:10px; border:2px solid #1B7A43; box-shadow:0 4px 14px rgba(37,211,102,.35);">📱 AVISAR PELO WHATSAPP</a>
+      <div style="font-size:11.5px; color:#3a8a5c; text-align:center; margin-top:8px;">a mensagem já vem pronta, é só enviar</div>
+    </div>
+
+    <button class="btn" id="btn-goto-login" style="width:100%;">Ir para o login</button>
   `);
   document.getElementById('btn-goto-login').addEventListener('click', ()=>{ authTemp={}; authScreen='login'; render(); });
 }
@@ -2016,32 +2054,37 @@ function wireAllOptionPickers(){
   });
 }
 
+let peiSubjectCounter = 0;
 function buildSubjectTableRows(componente, cidCodigos, modeloEstadual){
   const bloco = gerarBlocoComponente(componente, cidCodigos.length?cidCodigos:['']);
+  const uid = 'subj'+(peiSubjectCounter++);
   const pickerTurma = renderBNCCPicker(componente, 'Buscar e adicionar habilidade(s)');
   const pickerAdaptada = renderBNCCPicker(componente, 'Buscar e adicionar habilidade(s) adaptada(s) — pode escolher de qualquer etapa/ano');
+  const iaBtnRow = `<tr class="no-print"><td colspan="2" style="text-align:right; background:var(--panel-alt);"><button type="button" class="btn btn-gold" data-ia-componente="${uid}" data-componente-nome="${esc(componente)}">🤖 Gerar conteúdo com IA</button></td></tr>`;
   if(modeloEstadual){
     return `
       <tr><th colspan="2">${esc(componente)} │ Professor(a): ${esc(currentUser().nome)} │ Assinatura:</th></tr>
+      ${iaBtnRow}
       <tr><th style="width:22%;">Unidades Temáticas</th><td><textarea>${esc(bloco.unidade)}</textarea></td></tr>
       <tr><th>Objetos de Conhecimento</th><td><textarea></textarea></td></tr>
       <tr><th>Habilidades acadêmicas para a turma</th><td>${pickerTurma}</td></tr>
       <tr><th>Habilidades acadêmicas para o(a) estudante</th><td>${pickerAdaptada}</td></tr>
-      <tr><th>Metodologia / Recursos didáticos</th><td><textarea style="min-height:80px;">${esc(bloco.metodologia)}</textarea></td></tr>
-      <tr><th>Avaliação</th><td><textarea>${esc(bloco.avaliacao)}</textarea></td></tr>
+      <tr><th>Metodologia / Recursos didáticos</th><td><textarea id="metodologia-${uid}" style="min-height:80px;">${esc(bloco.metodologia)}</textarea></td></tr>
+      <tr><th>Avaliação</th><td><textarea id="avaliacao-${uid}">${esc(bloco.avaliacao)}</textarea></td></tr>
     `;
   }
   return `
     <tr><th colspan="2">${esc(componente)}</th></tr>
+    ${iaBtnRow}
     <tr><th style="width:22%;">Período do planejamento (data inicial e final)</th><td><input placeholder="__/__/____ a __/__/____"></td></tr>
     <tr><th>Unidades Temáticas</th><td><textarea>${esc(bloco.unidade)}</textarea></td></tr>
     <tr><th>Objetos de Conhecimento</th><td><textarea></textarea></td></tr>
-    <tr><th>Objetivos de aprendizagem</th><td><textarea>${esc(bloco.objetivos)}</textarea></td></tr>
+    <tr><th>Objetivos de aprendizagem</th><td><textarea id="objetivos-${uid}">${esc(bloco.objetivos)}</textarea></td></tr>
     <tr><th>Habilidade BNCC (turma)</th><td>${pickerTurma}</td></tr>
     <tr><th>Habilidade BNCC (adaptada ao estudante)</th><td>${pickerAdaptada}</td></tr>
     <tr><th>Atividades Diárias</th><td><textarea></textarea></td></tr>
-    <tr><th>Adaptações necessárias (recursos, estratégias, metodologia)</th><td><textarea style="min-height:80px;">${esc(bloco.metodologia)}</textarea></td></tr>
-    <tr><th>Avaliação (necessidades de ajustes, considerando os próximos planejamentos)</th><td><textarea>${esc(bloco.avaliacao)}</textarea></td></tr>
+    <tr><th>Adaptações necessárias (recursos, estratégias, metodologia)</th><td><textarea id="metodologia-${uid}" style="min-height:80px;">${esc(bloco.metodologia)}</textarea></td></tr>
+    <tr><th>Avaliação (necessidades de ajustes, considerando os próximos planejamentos)</th><td><textarea id="avaliacao-${uid}">${esc(bloco.avaliacao)}</textarea></td></tr>
   `;
 }
 
@@ -2578,6 +2621,38 @@ function wireAppListeners(selected, canEdit, isDev){
     });
   }
 
+  function wireIAComponenteButtons(){
+    document.querySelectorAll('[data-ia-componente]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const uid = btn.dataset.iaComponente;
+        const componente = btn.dataset.componenteNome;
+        const f = uiState.peiForm;
+        if(!f) return;
+        const cidCodigos = [...f.cids];
+        if(f.cidCustom && f.cidCustom.trim()) cidCodigos.push(f.cidCustom.trim().toUpperCase());
+        const cidLegendas = cidCodigos.map(c=>{ const found = CID_LIST.find(x=>x.codigo===c); return found?`${found.codigo} — ${found.legenda}`:c; });
+        const potenc = (f.potencialidades && f.potencialidades.trim()) || GENERIC_POTENCIALIDADE;
+        const prompt = montarPromptComponentePEI(componente, cidLegendas, potenc, f.dificuldades);
+        btn.disabled = true; btn.textContent = 'Gerando…';
+        try{
+          const texto = await chamarIA(prompt);
+          const parsed = parseRespostaComponentePEI(texto);
+          const objEl = document.getElementById('objetivos-'+uid);
+          const metEl = document.getElementById('metodologia-'+uid);
+          const avalEl = document.getElementById('avaliacao-'+uid);
+          if(objEl && parsed.objetivos){ objEl.value = parsed.objetivos; objEl.dispatchEvent(new Event('input')); }
+          if(metEl && parsed.metodologia){ metEl.value = parsed.metodologia; metEl.dispatchEvent(new Event('input')); }
+          if(avalEl && parsed.avaliacao){ avalEl.value = parsed.avaliacao; avalEl.dispatchEvent(new Event('input')); }
+        }catch(e){
+          if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
+          else alert('Erro ao gerar com IA: ' + e.message);
+        }finally{
+          btn.disabled = false; btn.textContent = '🤖 Gerar conteúdo com IA';
+        }
+      });
+    });
+  }
+
   function autosizeAllTextareas(containerId){
     const container = document.getElementById(containerId) || document;
     container.querySelectorAll('textarea').forEach(ta=>{
@@ -2596,6 +2671,7 @@ function wireAppListeners(selected, canEdit, isDev){
       wireAllBNCCPickers();
       wireAllOptionPickers();
       wireIAParecerButton();
+      wireIAComponenteButtons();
       autosizeAllTextareas('pei-output');
     }
   }
@@ -2633,6 +2709,7 @@ function wireAppListeners(selected, canEdit, isDev){
     wireAllBNCCPickers();
     wireAllOptionPickers();
     wireIAParecerButton();
+      wireIAComponenteButtons();
     autosizeAllTextareas('pei-output');
     wrap.style.display = 'block';
     wrap.scrollIntoView({behavior:'smooth'});
