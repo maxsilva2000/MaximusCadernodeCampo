@@ -1517,13 +1517,25 @@ function renderForgotReset(){
 function renderMainApp_root(){
   const user = currentUser();
   const isDev = user.role==='desenvolvedor';
+  const isGestor = user.role==='gestor';
   const canEdit = user.role!=='gestor';
-  const students = appData.students;
-  const escolasDisponiveis = [...new Set(students.map(s=>s.escola).filter(Boolean))].sort();
-  // Non-dev accounts are auto-scoped to their own school; only Desenvolvedor gets the free selector.
-  const escolaAtiva = isDev ? uiState.escolaFiltro : (user.escola || 'todas');
-  const escolaFiltrada = escolaAtiva!=='todas' ? students.filter(s=>s.escola===escolaAtiva) : students;
-  const selected = students.find(s=>s.id===uiState.selectedId) || null;
+  const allStudents = appData.students;
+
+  let escopoStudents;
+  if(isDev){
+    escopoStudents = allStudents;
+  } else if(isGestor){
+    escopoStudents = allStudents.filter(s=>s.escola===user.escola);
+  } else {
+    // Professor/Auxiliar: only their own registered students (plus legacy records with no owner yet)
+    escopoStudents = allStudents.filter(s=>s.criadoPor===user.id || !s.criadoPor);
+  }
+
+  const escolasDisponiveis = [...new Set(allStudents.map(s=>s.escola).filter(Boolean))].sort();
+  // Only Desenvolvedor gets the free school selector; Gestor/Professor are already scoped above.
+  const escolaAtiva = isDev ? uiState.escolaFiltro : 'todas';
+  const escolaFiltrada = (isDev && escolaAtiva!=='todas') ? escopoStudents.filter(s=>s.escola===escolaAtiva) : escopoStudents;
+  const selected = escopoStudents.find(s=>s.id===uiState.selectedId) || null;
   const filtered = escolaFiltrada.filter(s => s.nome.toLowerCase().includes(uiState.search.toLowerCase()));
   const bimAtual = getBimestre(new Date());
 
@@ -2893,6 +2905,7 @@ function openStudentModal(existing){
       horarioEstudo: document.getElementById('f-horario').value,
       responsavel: document.getElementById('f-resp').value,
       hasPhoto: existing ? (removePhoto ? false : (pendingPhoto ? true : !!existing.hasPhoto)) : !!pendingPhoto,
+      criadoPor: existing ? (existing.criadoPor || currentUser().id) : currentUser().id,
     };
     if(existing){
       appData.students = appData.students.map(s=> s.id===form.id?form:s);
