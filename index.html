@@ -610,21 +610,74 @@ const IA_PROVIDER_STORAGE = 'maximus-ia-provider';
 function getIAProvider(){ return localStorage.getItem(IA_PROVIDER_STORAGE) || 'claude'; }
 function setIAProvider(p){ localStorage.setItem(IA_PROVIDER_STORAGE, p); }
 
-async function chamarIA(promptTexto, tentativa){
-  tentativa = tentativa || 1;
-  const provider = getIAProvider();
-  try{
-    if(provider === 'gemini') return await chamarGeminiIA(promptTexto);
-    return await chamarClaudeIA(promptTexto);
-  }catch(e){
-    const msg = e.message || '';
-    const transitorio = msg.includes('API_ERROR:503') || msg.includes('API_ERROR:429');
-    if(transitorio && tentativa < 3){
-      await new Promise(r=>setTimeout(r, 1500*tentativa));
-      return chamarIA(promptTexto, tentativa+1);
-    }
-    throw e;
+const GROQ_KEY_STORAGE = 'maximus-groq-key';
+function getGroqKey(){ return localStorage.getItem(GROQ_KEY_STORAGE) || ''; }
+function setGroqKey(k){ if(k) localStorage.setItem(GROQ_KEY_STORAGE, k); else localStorage.removeItem(GROQ_KEY_STORAGE); }
+
+async function chamarGroqIA(promptTexto){
+  const key = getGroqKey();
+  if(!key) throw new Error('NO_KEY');
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + key,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: 'user', content: promptTexto }],
+    }),
+  });
+  if(!res.ok){
+    const errText = await res.text().catch(()=> '');
+    throw new Error('API_ERROR:' + res.status + ':' + errText.slice(0,300));
   }
+  const data = await res.json();
+  return ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '').trim();
+}
+
+const PROVIDER_ORDER = ['gemini', 'groq', 'claude'];
+const PROVIDER_LABEL = { gemini:'Gemini', groq:'Groq', claude:'Claude' };
+
+function temChaveProvider(provider){
+  if(provider==='gemini') return !!getGeminiKey();
+  if(provider==='groq') return !!getGroqKey();
+  return !!getAnthropicKey();
+}
+async function tentarProvider(provider, promptTexto){
+  if(provider==='gemini') return chamarGeminiIA(promptTexto);
+  if(provider==='groq') return chamarGroqIA(promptTexto);
+  return chamarClaudeIA(promptTexto);
+}
+async function chamarComRetry(provider, promptTexto, tentativas){
+  for(let i=1; i<=tentativas; i++){
+    try{
+      return await tentarProvider(provider, promptTexto);
+    }catch(e){
+      const msg = e.message || '';
+      const transitorio = msg.includes('API_ERROR:503') || msg.includes('API_ERROR:429');
+      if(transitorio && i<tentativas){
+        await new Promise(r=>setTimeout(r, 1200*i));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+async function chamarIA(promptTexto){
+  const preferido = getIAProvider();
+  const ordem = [preferido, ...PROVIDER_ORDER.filter(p=>p!==preferido)];
+  const disponiveis = ordem.filter(temChaveProvider);
+  if(disponiveis.length===0) throw new Error('NO_KEY');
+  let ultimoErro = null;
+  for(const provider of disponiveis){
+    try{
+      return await chamarComRetry(provider, promptTexto, 2);
+    }catch(e){
+      ultimoErro = e;
+    }
+  }
+  throw new Error('TODOS_FALHARAM:' + (ultimoErro ? ultimoErro.message : ''));
 }
 
 function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStart, periodoEnd){
@@ -2272,6 +2325,7 @@ function renderUserManagement(){
   const provider = getIAProvider();
   const claudeKey = getAnthropicKey();
   const geminiKey = getGeminiKey();
+  const groqKey = getGroqKey();
   return `
     <div class="main-panel">
       ${pendentes.length>0?`
@@ -2283,28 +2337,36 @@ function renderUserManagement(){
       <div class="card" style="margin-bottom:20px;">
         <div class="tab-badge">Configurar IA</div>
         <div class="serif" style="font-size:18px;font-weight:700;color:#B8860B;margin:8px 0 6px;">🤖 Geração de relatórios e pareceres por IA</div>
-        <div style="font-size:12px; color:var(--dim); margin-bottom:14px;">A chave fica salva só neste navegador/aparelho — nunca é enviada para o Firebase nem aparece no código do site.</div>
+        <div style="font-size:12px; color:var(--dim); margin-bottom:6px;">A chave fica salva só neste navegador/aparelho — nunca é enviada para o Firebase nem aparece no código do site.</div>
+        <div class="ai-disclaimer" style="margin-bottom:14px;">🔄 <span>Preencha quantas chaves quiser. O app tenta primeiro o "provedor preferido"; se ele falhar (fora do ar, sobrecarregado), tenta automaticamente os outros que tiverem chave configurada, na ordem Gemini → Groq → Claude.</span></div>
 
-        <label class="field" style="margin-bottom:12px;"><span>Provedor de IA</span>
+        <label class="field" style="margin-bottom:12px;"><span>Provedor preferido (tentado primeiro)</span>
           <select id="ia-provider-select">
-            <option value="claude" ${provider==='claude'?'selected':''}>Claude (Anthropic) — pago por uso, sem uso dos dados para treinar modelos</option>
-            <option value="gemini" ${provider==='gemini'?'selected':''}>Gemini (Google) — gratuito, mas os dados podem ser usados pelo Google para treinar modelos</option>
+            <option value="gemini" ${provider==='gemini'?'selected':''}>Gemini (Google) — gratuito, dados podem treinar modelos do Google</option>
+            <option value="groq" ${provider==='groq'?'selected':''}>Groq (Llama) — gratuito, sem cartão de crédito</option>
+            <option value="claude" ${provider==='claude'?'selected':''}>Claude (Anthropic) — pago por uso, dados não usados para treino</option>
           </select>
         </label>
 
         <div class="grid2">
-          <div>
-            <label class="field"><span>Chave de API — Claude (Anthropic)</span>
-              <div class="pw-wrap"><input type="password" id="ia-claude-key" value="${esc(claudeKey)}" placeholder="sk-ant-..."><button type="button" class="pw-eye" data-toggle-pw="ia-claude-key">👁</button></div>
-            </label>
-            <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha em console.anthropic.com</div>
-          </div>
           <div>
             <label class="field"><span>Chave de API — Gemini (Google)</span>
               <div class="pw-wrap"><input type="password" id="ia-gemini-key" value="${esc(geminiKey)}" placeholder="AIza..."><button type="button" class="pw-eye" data-toggle-pw="ia-gemini-key">👁</button></div>
             </label>
             <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha gratuitamente em aistudio.google.com</div>
           </div>
+          <div>
+            <label class="field"><span>Chave de API — Groq (Llama)</span>
+              <div class="pw-wrap"><input type="password" id="ia-groq-key" value="${esc(groqKey)}" placeholder="gsk_..."><button type="button" class="pw-eye" data-toggle-pw="ia-groq-key">👁</button></div>
+            </label>
+            <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha gratuitamente em console.groq.com/keys</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <label class="field"><span>Chave de API — Claude (Anthropic)</span>
+            <div class="pw-wrap"><input type="password" id="ia-claude-key" value="${esc(claudeKey)}" placeholder="sk-ant-..."><button type="button" class="pw-eye" data-toggle-pw="ia-claude-key">👁</button></div>
+          </label>
+          <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha em console.anthropic.com (pago por uso)</div>
         </div>
 
         <button class="btn btn-gold" id="btn-save-ia-config" style="margin-top:14px;">Salvar configuração de IA</button>
@@ -2544,6 +2606,7 @@ function wireAppListeners(selected, canEdit, isDev){
     setIAProvider(document.getElementById('ia-provider-select').value);
     setAnthropicKey(document.getElementById('ia-claude-key').value.trim());
     setGeminiKey(document.getElementById('ia-gemini-key').value.trim());
+    setGroqKey(document.getElementById('ia-groq-key').value.trim());
     const msg = document.getElementById('ia-config-saved-msg');
     msg.style.display = 'block';
     setTimeout(()=>{ msg.style.display = 'none'; }, 3000);
@@ -2637,6 +2700,7 @@ function wireAppListeners(selected, canEdit, isDev){
         document.getElementById('pei-parecer-text').value = texto;
       }catch(e){
         if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
+        else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
         else alert('Erro ao gerar com IA: ' + e.message);
       }finally{
         btn.disabled = false; btn.textContent = '🤖 Gerar com IA';
@@ -2668,7 +2732,8 @@ function wireAppListeners(selected, canEdit, isDev){
           if(avalEl && parsed.avaliacao){ avalEl.value = parsed.avaliacao; avalEl.dispatchEvent(new Event('input')); }
         }catch(e){
           if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
-          else alert('Erro ao gerar com IA: ' + e.message);
+          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+        else alert('Erro ao gerar com IA: ' + e.message);
         }finally{
           btn.disabled = false; btn.textContent = '🤖 Gerar conteúdo com IA';
         }
@@ -2754,7 +2819,8 @@ function wireAppListeners(selected, canEdit, isDev){
       ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
     }catch(e){
       if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
-      else alert('Erro ao gerar com IA: ' + e.message);
+      else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+        else alert('Erro ao gerar com IA: ' + e.message);
     }finally{
       btn.disabled = false; btn.textContent = '🤖 Gerar com IA (Claude)';
     }
