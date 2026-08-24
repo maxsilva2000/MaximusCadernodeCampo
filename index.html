@@ -223,6 +223,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
 /* ============ generic helpers ============ */
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
@@ -267,12 +268,15 @@ const firebaseConfig = {
 };
 
 let db = null;
+let auth = null;
 if(!HAS_CLAUDE_STORAGE){
   try{
     const fbApp = initializeApp(firebaseConfig);
     db = getFirestore(fbApp);
+    auth = getAuth(fbApp);
+    setPersistence(auth, browserLocalPersistence).catch(()=>{});
     enableIndexedDbPersistence(db).catch(()=>{ /* multiple tabs open, or unsupported browser — safe to ignore */ });
-  }catch(e){ db = null; }
+  }catch(e){ db = null; auth = null; }
 }
 
 const KV_COLLECTION = 'kv';
@@ -1166,15 +1170,20 @@ function migrateAppData(){
 
 let firstLoadDone = false;
 
-function tentarRestaurarSessao(){
-  if(session.userId) return; // already logged in this tab
-  const savedId = localStorage.getItem('maximus-session-userid');
-  if(!savedId) return;
-  const user = appData.users.find(u=>u.id===savedId);
-  if(!user){ localStorage.removeItem('maximus-session-userid'); return; }
-  if(user.status && user.status!=='ativo'){ localStorage.removeItem('maximus-session-userid'); return; }
-  if(user.pagamentoExpira && Date.now() > user.pagamentoExpira){ localStorage.removeItem('maximus-session-userid'); return; }
-  session.userId = user.id;
+function restaurarSessaoViaAuth(){
+  return new Promise(resolve=>{
+    if(!auth){ resolve(); return; }
+    const unsub = onAuthStateChanged(auth, (fbUser)=>{
+      unsub();
+      if(fbUser){
+        const user = appData.users.find(u=>u.id===fbUser.uid);
+        const valido = user && (!user.status || user.status==='ativo') && !(user.pagamentoExpira && Date.now() > user.pagamentoExpira);
+        if(valido){ session.userId = user.id; }
+        else { signOut(auth).catch(()=>{}); }
+      }
+      resolve();
+    });
+  });
 }
 
 async function initApp(){
@@ -1192,7 +1201,7 @@ async function initApp(){
       migrateAppData();
       saveStatus = 'ok';
     }
-    tentarRestaurarSessao();
+    await restaurarSessaoViaAuth();
     await minWait;
     render();
     hideSplash();
@@ -1211,14 +1220,14 @@ async function initApp(){
   }, 6000);
 
   const ref = doc(db, KV_COLLECTION, STORAGE_KEY);
-  onSnapshot(ref, (snap) => {
+  onSnapshot(ref, async (snap) => {
     appData = (snap.exists() && snap.data().value) ? JSON.parse(snap.data().value) : (appData || emptyData());
     migrateAppData();
     saveStatus = 'ok';
     if(!firstLoadDone){
       clearTimeout(safetyTimeout);
       firstLoadDone = true;
-      tentarRestaurarSessao();
+      await restaurarSessaoViaAuth();
       minWait.then(()=>{ render(); hideSplash(); });
     } else {
       withFocusPreserved(()=> render());
@@ -1302,7 +1311,7 @@ function renderLoginScreen(){
     ${noUsers?`<div class="auth-info">Nenhuma conta cadastrada ainda. Crie a primeira conta — ela será automaticamente a conta de Desenvolvedor.</div>`:''}
     ${roleTabsHTML(role)}
     <div style="display:flex;flex-direction:column;gap:12px;">
-      <label class="field"><span>E-mail, CPF ou telefone</span><input id="li-id" value="${esc(remembered)}" placeholder="voce@email.com, CPF ou telefone" autocomplete="username"></label>
+      <label class="field"><span>E-mail</span><input id="li-id" value="${esc(remembered)}" placeholder="voce@email.com" autocomplete="username" type="email"></label>
       ${pwField('li-pw','Senha','')}
     </div>
     <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; margin-top:12px;">
@@ -1328,29 +1337,49 @@ function renderLoginScreen(){
 }
 
 async function doLogin(){
-  const idn = document.getElementById('li-id').value;
+  const idnRaw = document.getElementById('li-id').value;
+  const email = (idnRaw||'').trim().toLowerCase();
   const pw = document.getElementById('li-pw').value;
   const selectedRole = authTemp.loginRole || 'professor';
-  const user = findUserByIdentifier(idn);
-  if(!user){ authTemp={loginRole:selectedRole, error:'E-mail/CPF/telefone ou senha incorretos.'}; render(); return; }
-  const hash = await hashPassword(pw, user.salt);
-  if(hash !== user.passHash){ authTemp={loginRole:selectedRole, error:'E-mail/CPF/telefone ou senha incorretos.'}; render(); return; }
+  if(!email.includes('@')){
+    authTemp={loginRole:selectedRole, error:'Entre com seu e-mail. CPF e telefone não são mais usados para login, por segurança.'};
+    render(); return;
+  }
+  if(!auth){
+    authTemp={loginRole:selectedRole, error:'Login indisponível: conexão com o servidor não estabelecida. Verifique sua internet e tente novamente.'};
+    render(); return;
+  }
+  let cred;
+  try{
+    cred = await signInWithEmailAndPassword(auth, email, pw);
+  }catch(e){
+    authTemp={loginRole:selectedRole, error:'E-mail ou senha incorretos.'};
+    render(); return;
+  }
+  const user = appData.users.find(u=>u.id===cred.user.uid);
+  if(!user){
+    authTemp={loginRole:selectedRole, error:'Login válido, mas não encontramos seu cadastro no sistema. Procure o Desenvolvedor.'};
+    await signOut(auth);
+    render(); return;
+  }
   if(user.role !== selectedRole){
     authTemp={loginRole:selectedRole, error:`Esta conta não tem acesso de ${ROLE_LABEL[selectedRole]}. Sua conta está cadastrada como ${ROLE_LABEL[user.role]}.`};
+    await signOut(auth);
     render(); return;
   }
   if(user.status && user.status !== 'ativo'){
     authTemp = {loginRole:selectedRole, error:'Sua conta ainda está aguardando aprovação de um Desenvolvedor do sistema. Procure o Desenvolvedor responsável para liberar seu acesso.'};
+    await signOut(auth);
     render(); return;
   }
   if(user.pagamentoExpira && Date.now() > user.pagamentoExpira){
     authTemp = {loginRole:selectedRole, error:'Sua assinatura venceu (30 dias a partir do último pagamento). Realize um novo pagamento pelo Mercado Pago e avise o Desenvolvedor para renovar seu acesso.'};
+    await signOut(auth);
     render(); return;
   }
   const remember = document.getElementById('li-remember')?.checked;
-  if(remember){ localStorage.setItem('maximus-remember-id-'+selectedRole, idn); }
+  if(remember){ localStorage.setItem('maximus-remember-id-'+selectedRole, email); }
   else { localStorage.removeItem('maximus-remember-id-'+selectedRole); }
-  localStorage.setItem('maximus-session-userid', user.id);
   session.userId = user.id; authTemp={}; authScreen='login'; render();
 }
 
@@ -1385,7 +1414,6 @@ function renderSignupRoleChoice(){
 function renderSignupScreen(){
   const step = authTemp.step || 'dados';
   if(step==='dados') return renderSignupDados();
-  if(step==='seguranca') return renderSignupSeguranca();
 }
 
 function renderSignupDados(){
@@ -1446,65 +1474,37 @@ function renderSignupDados(){
     if(appData.users.some(u=>u.cpf===cpfDigits)) return fail('Já existe uma conta com este CPF.');
     if(senha.length<8) return fail('A senha deve ter pelo menos 8 caracteres.');
     if(senha!==senha2) return fail('As senhas não coincidem.');
+    if(!auth) return fail('Cadastro indisponível: conexão com o servidor não estabelecida. Verifique sua internet e tente novamente.');
     (async ()=>{
       if(isDevRole){
         const masterHash = await sha256Hex(masterPw);
         if(masterHash !== DEV_MASTER_HASH) return fail('Senha mestra de Desenvolvedor incorreta.');
       }
-      const salt = randomHex(16);
-      const passHash = await hashPassword(senha, salt);
-      authTemp = {
-        step:'seguranca',
-        pendingUser: { id:uid(), nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal, salt, passHash, role:targetRole, status: targetRole==='desenvolvedor'?'ativo':'pendente', pagamentoConfirmado: targetRole==='desenvolvedor', securityQuestion:'', securityAnswerHash:'', createdAt:Date.now() },
+      let cred;
+      try{
+        cred = await createUserWithEmailAndPassword(auth, email, senha);
+      }catch(e){
+        if(e.code==='auth/email-already-in-use') return fail('Já existe uma conta com este e-mail.');
+        if(e.code==='auth/weak-password') return fail('Senha muito fraca. Use pelo menos 8 caracteres.');
+        return fail('Não foi possível criar a conta: ' + (e.message||'erro desconhecido') + '.');
+      }
+      const user = {
+        id: cred.user.uid, nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal,
+        role:targetRole, status: targetRole==='desenvolvedor'?'ativo':'pendente',
+        pagamentoConfirmado: targetRole==='desenvolvedor', pagamentoData:null, pagamentoExpira:null,
+        createdAt:Date.now(),
       };
-      render();
+      appData.users.push(user);
+      persist();
+      if(user.status === 'ativo'){
+        session.userId = user.id;
+        authTemp={}; authScreen='login'; render();
+      } else {
+        await signOut(auth); // pending accounts shouldn't stay signed in until approved
+        authTemp = { pendingNotifyUser: user };
+        authScreen='signup-pending'; render();
+      }
     })();
-  });
-}
-
-function renderSignupSeguranca(){
-  const customSelected = authTemp.customQuestion===true;
-  authShell(`
-    <div class="serif" style="text-align:center;font-size:17px;margin-bottom:6px;">Recuperação de senha</div>
-    <div style="text-align:center;font-size:12.5px;color:var(--dim);margin-bottom:14px;">Escolha uma pergunta de segurança. Ela será usada para redefinir sua senha caso você a esqueça.</div>
-    ${authTemp.error?`<div class="auth-error">${esc(authTemp.error)}</div>`:''}
-    <label class="field"><span>Pergunta de segurança</span>
-      <select id="su-question">
-        ${SECURITY_QUESTIONS.map(q=>`<option value="${esc(q)}" ${authTemp.chosenQuestion===q?'selected':''}>${q}</option>`).join('')}
-      </select>
-    </label>
-    <div id="custom-q-wrap" style="display:${customSelected?'block':'none'}; margin-top:10px;">
-      <label class="field"><span>Digite sua pergunta</span><input id="su-question-custom" value="${esc(authTemp.customQuestionText||'')}"></label>
-    </div>
-    <label class="field" style="margin-top:10px;"><span>Resposta</span><input id="su-answer" value=""></label>
-    <button class="btn btn-gold" id="btn-finish-signup" style="width:100%;padding:11px 0;margin-top:16px;">Criar conta</button>
-  `);
-  const sel = document.getElementById('su-question');
-  sel.addEventListener('change', ()=>{
-    authTemp.customQuestion = sel.value==='Outra pergunta (personalizada)';
-    authTemp.chosenQuestion = sel.value;
-    render();
-  });
-  document.getElementById('btn-finish-signup').addEventListener('click', async ()=>{
-    let question = document.getElementById('su-question').value;
-    if(question==='Outra pergunta (personalizada)'){
-      question = document.getElementById('su-question-custom').value.trim();
-      if(!question){ authTemp={...authTemp, error:'Digite sua pergunta personalizada.'}; render(); return; }
-    }
-    const answer = document.getElementById('su-answer').value.trim();
-    if(!answer){ authTemp={...authTemp, error:'Informe uma resposta.'}; render(); return; }
-    const user = authTemp.pendingUser;
-    user.securityQuestion = question;
-    user.securityAnswerHash = await hashAnswer(answer);
-    appData.users.push(user);
-    persist();
-    if(user.status === 'ativo'){
-      session.userId = user.id;
-      authTemp={}; authScreen='login'; render();
-    } else {
-      authTemp = { pendingNotifyUser: user };
-      authScreen='signup-pending'; render();
-    }
   });
 }
 
@@ -1548,72 +1548,27 @@ function renderSignupPending(){
 }
 
 function renderForgotScreen(){
-  const step = authTemp.fstep || 'identify';
-  if(step==='identify') return renderForgotIdentify();
-  if(step==='question') return renderForgotQuestion();
-  if(step==='reset') return renderForgotReset();
-}
-function renderForgotIdentify(){
   authShell(`
     <div class="serif" style="text-align:center;font-size:17px;margin-bottom:6px;">Esqueci minha senha</div>
-    <div style="text-align:center;font-size:12.5px;color:var(--dim);margin-bottom:14px;">Digite o e-mail ou telefone cadastrado na sua conta.</div>
+    <div style="text-align:center;font-size:12.5px;color:var(--dim);margin-bottom:14px;">Digite o e-mail da sua conta. Vamos enviar um link de redefinição de senha para ele.</div>
     ${authTemp.error?`<div class="auth-error">${esc(authTemp.error)}</div>`:''}
-    <label class="field"><span>E-mail ou telefone</span><input id="fg-id" placeholder="voce@email.com ou (00) 00000-0000"></label>
-    <button class="btn btn-gold" id="btn-fg-next" style="width:100%;padding:11px 0;margin-top:14px;">Continuar</button>
+    ${authTemp.info?`<div class="auth-info">${esc(authTemp.info)}</div>`:''}
+    <label class="field"><span>E-mail</span><input id="fg-id" placeholder="voce@email.com"></label>
+    <button class="btn btn-gold" id="btn-fg-next" style="width:100%;padding:11px 0;margin-top:14px;">Enviar link de redefinição</button>
     <div style="text-align:center;margin-top:14px;">
       <button class="auth-link" id="lnk-back-login4">Voltar ao login</button>
     </div>
   `);
   document.getElementById('lnk-back-login4').addEventListener('click', ()=>{ authTemp={}; authScreen='login'; render(); });
-  document.getElementById('btn-fg-next').addEventListener('click', ()=>{
-    const user = findUserByIdentifier(document.getElementById('fg-id').value);
-    if(!user){ authTemp={fstep:'identify', error:'Não encontramos uma conta com esse e-mail/telefone.'}; render(); return; }
-    authTemp = { fstep:'question', forgotUserId:user.id };
+  document.getElementById('btn-fg-next').addEventListener('click', async ()=>{
+    const email = document.getElementById('fg-id').value.trim().toLowerCase();
+    if(!validEmail(email)){ authTemp={error:'Digite um e-mail válido.'}; render(); return; }
+    if(!auth){ authTemp={error:'Indisponível no momento: conexão com o servidor não estabelecida.'}; render(); return; }
+    try{
+      await sendPasswordResetEmail(auth, email);
+    }catch(e){ /* don't reveal whether the email exists — same message either way */ }
+    authTemp = { info:'Se houver uma conta com esse e-mail, enviamos um link de redefinição de senha para ela. Confira sua caixa de entrada (e o spam).' };
     render();
-  });
-}
-function renderForgotQuestion(){
-  const user = appData.users.find(u=>u.id===authTemp.forgotUserId);
-  authShell(`
-    <div class="serif" style="text-align:center;font-size:17px;margin-bottom:6px;">Pergunta de segurança</div>
-    ${authTemp.error?`<div class="auth-error">${esc(authTemp.error)}</div>`:''}
-    <label class="field"><span>${esc(user.securityQuestion)}</span><input id="fg-answer" placeholder="Sua resposta"></label>
-    <button class="btn btn-gold" id="btn-fg-answer-next" style="width:100%;padding:11px 0;margin-top:14px;">Verificar</button>
-    <div class="auth-info" style="margin-top:14px;">Não lembra a resposta? Peça ao Desenvolvedor do sistema para redefinir sua senha em "Gerenciar usuários".</div>
-    <div style="text-align:center;margin-top:10px;">
-      <button class="auth-link" id="lnk-back-login5">Voltar ao login</button>
-    </div>
-  `);
-  document.getElementById('lnk-back-login5').addEventListener('click', ()=>{ authTemp={}; authScreen='login'; render(); });
-  document.getElementById('btn-fg-answer-next').addEventListener('click', async ()=>{
-    const answer = document.getElementById('fg-answer').value;
-    const hash = await hashAnswer(answer);
-    if(hash !== user.securityAnswerHash){ authTemp={...authTemp, error:'Resposta incorreta.'}; render(); return; }
-    authTemp = { fstep:'reset', forgotUserId:user.id };
-    render();
-  });
-}
-function renderForgotReset(){
-  authShell(`
-    <div class="serif" style="text-align:center;font-size:17px;margin-bottom:14px;">Nova senha</div>
-    ${authTemp.error?`<div class="auth-error">${esc(authTemp.error)}</div>`:''}
-    ${pwField('fg-pw','Nova senha (mínimo 8 caracteres)','')}
-    <div style="margin-top:10px;">${pwField('fg-pw2','Confirmar nova senha','')}</div>
-    <button class="btn btn-gold" id="btn-fg-save" style="width:100%;padding:11px 0;margin-top:14px;">Salvar nova senha</button>
-  `);
-  wirePwToggles();
-  document.getElementById('btn-fg-save').addEventListener('click', async ()=>{
-    const pw = document.getElementById('fg-pw').value;
-    const pw2 = document.getElementById('fg-pw2').value;
-    if(pw.length<8){ authTemp={...authTemp, error:'A senha deve ter pelo menos 8 caracteres.'}; render(); return; }
-    if(pw!==pw2){ authTemp={...authTemp, error:'As senhas não coincidem.'}; render(); return; }
-    const user = appData.users.find(u=>u.id===authTemp.forgotUserId);
-    const salt = randomHex(16);
-    user.salt = salt;
-    user.passHash = await hashPassword(pw, salt);
-    persist();
-    authTemp = { info:'Senha redefinida com sucesso. Faça login com sua nova senha.' };
-    authScreen='login'; render();
   });
 }
 
@@ -2488,8 +2443,7 @@ function renderUserManagement(){
                 </td>
                 <td style="white-space:nowrap;">
                   ${pendente?`<button class="btn btn-gold" data-approve-user="${u.id}" style="margin-right:4px;">Aprovar</button>`:''}
-                  <button class="btn" data-reset-pw="${u.id}" style="margin-right:4px;">Redefinir senha</button>
-                  <button class="btn" data-reset-question="${u.id}" style="margin-right:4px;">Redefinir pergunta</button>
+                  <button class="btn" data-reset-pw="${u.id}" style="margin-right:4px;">Enviar redefinição de senha</button>
                   ${u.id!==session.userId?`<button class="btn btn-danger" data-delete-user="${u.id}">Excluir</button>`:''}
                 </td>
               </tr>
@@ -2561,8 +2515,8 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('sidebar-backdrop')?.addEventListener('click', ()=>{ uiState.sidebarOpen=false; renderApp(); });
 
   document.getElementById('btn-logout')?.addEventListener('click', ()=>{
+    if(auth) signOut(auth).catch(()=>{});
     session.userId=null;
-    localStorage.removeItem('maximus-session-userid');
     uiState={ selectedId:null, search:'', escolaFiltro:'todas', userEscolaFiltro:'todas', calYear:(new Date()).getFullYear(), calMonth:(new Date()).getMonth(), bimYear:(new Date()).getFullYear(), bim:getBimestre(new Date()), view:'ficha', sidebarOpen:false };
     authScreen='login'; authTemp={loginRole:'professor'}; render();
   });
@@ -2636,23 +2590,14 @@ function wireAppListeners(selected, canEdit, isDev){
   document.querySelectorAll('[data-reset-pw]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const u = appData.users.find(x=>x.id===btn.dataset.resetPw);
-      const newPw = prompt(`Nova senha temporária para ${u.nome} (mínimo 8 caracteres):`);
-      if(!newPw) return;
-      if(newPw.length<8){ alert('A senha deve ter pelo menos 8 caracteres.'); return; }
-      const salt = randomHex(16);
-      u.salt = salt; u.passHash = await hashPassword(newPw, salt);
-      persist();
-      alert('Senha redefinida. Informe a nova senha para o usuário.');
-    });
-  });
-  document.querySelectorAll('[data-reset-question]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const u = appData.users.find(x=>x.id===btn.dataset.resetQuestion);
-      const q = prompt(`Nova pergunta de segurança para ${u.nome}:`, u.securityQuestion||'');
-      if(!q) return;
-      const a = prompt(`Nova resposta para "${q}":`);
-      if(!a) return;
-      (async ()=>{ u.securityQuestion=q; u.securityAnswerHash = await hashAnswer(a); persist(); alert('Pergunta de segurança redefinida.'); })();
+      if(!auth){ alert('Indisponível: conexão com o servidor não estabelecida.'); return; }
+      if(!confirm(`Enviar e-mail de redefinição de senha para ${u.nome} (${u.email})?`)) return;
+      try{
+        await sendPasswordResetEmail(auth, u.email);
+        alert('E-mail de redefinição enviado para ' + u.email + '.');
+      }catch(e){
+        alert('Não foi possível enviar o e-mail: ' + (e.message||'erro desconhecido'));
+      }
     });
   });
   document.querySelectorAll('[data-delete-user]').forEach(btn=>{
