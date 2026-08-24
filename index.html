@@ -1470,8 +1470,6 @@ function renderSignupDados(){
     if(!validaCPF(cpfDigits)) return fail('CPF inválido.');
     if(needsEscola && !escolaVal) return fail('Selecione a escola.');
     if(appData.users.some(u=>u.email===email)) return fail('Já existe uma conta com este e-mail.');
-    if(appData.users.some(u=>u.telefone===telDigits)) return fail('Já existe uma conta com este telefone.');
-    if(appData.users.some(u=>u.cpf===cpfDigits)) return fail('Já existe uma conta com este CPF.');
     if(senha.length<8) return fail('A senha deve ter pelo menos 8 caracteres.');
     if(senha!==senha2) return fail('As senhas não coincidem.');
     if(!auth) return fail('Cadastro indisponível: conexão com o servidor não estabelecida. Verifique sua internet e tente novamente.');
