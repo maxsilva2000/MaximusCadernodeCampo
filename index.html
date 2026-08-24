@@ -2140,8 +2140,11 @@ function wireAllBNCCPickers(){
     searchInput.addEventListener('input', ()=>{
       const q = searchInput.value.trim().toLowerCase();
       if(q.length<2){ results.innerHTML=''; return; }
-      const matches = pool.filter(s=> s.codigo.toLowerCase().includes(q) || s.texto.toLowerCase().includes(q)).slice(0,15);
-      results.innerHTML = matches.length ? matches.map(s=>`<div class="bncc-result-item" data-codigo="${esc(s.codigo)}"><strong>${esc(s.codigo)}</strong> — ${esc(s.texto.length>100?s.texto.slice(0,100)+'…':s.texto)}</div>`).join('') : '<div class="bncc-result-empty">Nenhuma habilidade encontrada nesta área.</div>';
+      const codeMatches = pool.filter(s=> s.codigo.toLowerCase().includes(q));
+      const textMatches = pool.filter(s=> !s.codigo.toLowerCase().includes(q) && s.texto.toLowerCase().includes(q));
+      const matches = [...codeMatches, ...textMatches].slice(0,15);
+      const etapaLabel = { EI:'Infantil', EF:'Fundamental', EM:'Médio' };
+      results.innerHTML = matches.length ? matches.map(s=>`<div class="bncc-result-item" data-codigo="${esc(s.codigo)}"><span style="display:inline-block; font-size:9.5px; font-weight:700; color:#8a7332; background:#F3EAD0; border-radius:4px; padding:1px 5px; margin-right:5px; vertical-align:middle;">${etapaLabel[s.et]||s.et||''}</span><strong>${esc(s.codigo)}</strong> — ${esc(s.texto.length>100?s.texto.slice(0,100)+'…':s.texto)}</div>`).join('') : '<div class="bncc-result-empty">Nenhuma habilidade encontrada nesta área.</div>';
       results.querySelectorAll('.bncc-result-item').forEach(item=>{
         item.addEventListener('click', ()=>{
           const cod = item.dataset.codigo;
