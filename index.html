@@ -1311,14 +1311,13 @@ function roleTabsHTML(current){
 }
 
 function renderLoginScreen(){
-  const noUsers = appData.users.length===0;
   const role = authTemp.loginRole || 'professor';
   const remembered = localStorage.getItem('maximus-remember-id-'+role) || '';
   authShell(`
     <div class="serif" style="text-align:center;font-size:17px;margin-bottom:14px;">Caderno de Campo</div>
     ${authTemp.error?`<div class="auth-error">${esc(authTemp.error)}</div>`:''}
     ${authTemp.info?`<div class="auth-info">${esc(authTemp.info)}</div>`:''}
-    ${noUsers?`<div class="auth-info">Nenhuma conta cadastrada ainda. Crie a primeira conta — ela será automaticamente a conta de Desenvolvedor.</div>`:''}
+    <div class="auth-info">Nenhuma conta cadastrada ainda? Crie sua primeira conta.</div>
     ${roleTabsHTML(role)}
     <div style="display:flex;flex-direction:column;gap:12px;">
       <label class="field"><span>E-mail</span><input id="li-id" value="${esc(remembered)}" placeholder="voce@email.com" autocomplete="username" type="email"></label>
