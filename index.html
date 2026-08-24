@@ -1590,6 +1590,13 @@ function persist(){
     renderStatusLine();
   }, 200);
 }
+async function persistImmediate(){
+  clearTimeout(saveTimer);
+  saveStatus='saving';
+  try{ await store.set(STORAGE_KEY, JSON.stringify(appData)); saveStatus='ok'; }
+  catch(e){ saveStatus='offline'; }
+  renderStatusLine();
+}
 function renderStatusLine(){
   const el = document.getElementById('status-line');
   if(!el) return;
@@ -1829,7 +1836,7 @@ function renderSignupDados(){
         createdAt:Date.now(),
       };
       appData.users.push(user);
-      persist();
+      await persistImmediate();
       if(user.status === 'ativo'){
         session.userId = user.id;
         authTemp={}; authScreen='login'; render();
