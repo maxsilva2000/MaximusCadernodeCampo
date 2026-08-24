@@ -1186,8 +1186,31 @@ function restaurarSessaoViaAuth(){
   });
 }
 
+let mainSyncStarted = false;
+function garantirSyncPrincipal(){
+  return new Promise((resolve)=>{
+    if(mainSyncStarted){ resolve(); return; }
+    if(!db){ resolve(); return; }
+    mainSyncStarted = true;
+    const ref = doc(db, KV_COLLECTION, STORAGE_KEY);
+    let resolved = false;
+    onSnapshot(ref, (snap) => {
+      appData = (snap.exists() && snap.data().value) ? JSON.parse(snap.data().value) : (appData || emptyData());
+      migrateAppData();
+      saveStatus = 'ok';
+      if(!resolved){ resolved = true; resolve(); }
+      else { withFocusPreserved(()=> render()); }
+    }, (err)=>{
+      console.error('Firestore sync error:', err);
+      if(!resolved){ resolved = true; resolve(); }
+    });
+  });
+}
+
 async function initApp(){
   const minWait = new Promise(r=>setTimeout(r, 550));
+  appData = emptyData();
+  migrateAppData();
 
   if(HAS_CLAUDE_STORAGE || !db){
     // one-time load: Claude preview storage, or Firestore unavailable (fell back to localStorage)
@@ -1208,41 +1231,28 @@ async function initApp(){
     return;
   }
 
-  // real-time sync via Firestore — every device sees updates instantly
-  const safetyTimeout = setTimeout(()=>{
-    if(!firstLoadDone){
-      appData = emptyData();
-      migrateAppData();
-      firstLoadDone = true;
-      render();
-      hideSplash();
-    }
-  }, 6000);
-
-  const ref = doc(db, KV_COLLECTION, STORAGE_KEY);
-  onSnapshot(ref, async (snap) => {
-    appData = (snap.exists() && snap.data().value) ? JSON.parse(snap.data().value) : (appData || emptyData());
-    migrateAppData();
-    saveStatus = 'ok';
-    if(!firstLoadDone){
-      clearTimeout(safetyTimeout);
-      firstLoadDone = true;
-      await restaurarSessaoViaAuth();
-      minWait.then(()=>{ render(); hideSplash(); });
-    } else {
-      withFocusPreserved(()=> render());
-    }
-  }, (err)=>{
-    console.error('Firestore sync error:', err);
-    if(!firstLoadDone){
-      clearTimeout(safetyTimeout);
-      appData = emptyData();
-      migrateAppData();
-      firstLoadDone = true;
-      render();
-      hideSplash();
-    }
+  // Real Firebase path: our security rules now require a signed-in user to read
+  // anything, so we check the auth state FIRST (this doesn't touch Firestore —
+  // it just reads Firebase Auth's own locally persisted session) and only
+  // attempt to read the protected data once we know we're authenticated.
+  // Until then, the login/signup screens run on the safe placeholder from
+  // emptyData() (which already has the seeded school list built in).
+  const fbUser = await new Promise(resolve=>{
+    if(!auth){ resolve(null); return; }
+    const unsub = onAuthStateChanged(auth, (u)=>{ unsub(); resolve(u); });
   });
+
+  if(fbUser){
+    await garantirSyncPrincipal();
+    const user = appData.users.find(u=>u.id===fbUser.uid);
+    const valido = user && (!user.status || user.status==='ativo') && !(user.pagamentoExpira && Date.now() > user.pagamentoExpira);
+    if(valido){ session.userId = user.id; }
+    else { await signOut(auth).catch(()=>{}); }
+  }
+
+  await minWait;
+  render();
+  hideSplash();
 }
 
 let saveTimer=null;
@@ -1356,6 +1366,7 @@ async function doLogin(){
     authTemp={loginRole:selectedRole, error:'E-mail ou senha incorretos.'};
     render(); return;
   }
+  await garantirSyncPrincipal();
   const user = appData.users.find(u=>u.id===cred.user.uid);
   if(!user){
     authTemp={loginRole:selectedRole, error:'Login válido, mas não encontramos seu cadastro no sistema. Procure o Desenvolvedor.'};
@@ -1486,6 +1497,7 @@ function renderSignupDados(){
         if(e.code==='auth/weak-password') return fail('Senha muito fraca. Use pelo menos 8 caracteres.');
         return fail('Não foi possível criar a conta: ' + (e.message||'erro desconhecido') + '.');
       }
+      await garantirSyncPrincipal();
       const user = {
         id: cred.user.uid, nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal,
         role:targetRole, status: targetRole==='desenvolvedor'?'ativo':'pendente',
