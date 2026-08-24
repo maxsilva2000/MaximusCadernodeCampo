@@ -571,9 +571,8 @@ function gerarParecerPEI(student, potenc, dific, periodoLabel){
 }
 
 /* ============ IA (Claude API — chave própria do usuário, direto do navegador) ============ */
-const ANTHROPIC_KEY_STORAGE = 'maximus-anthropic-key';
-function getAnthropicKey(){ return localStorage.getItem(ANTHROPIC_KEY_STORAGE) || ''; }
-function setAnthropicKey(k){ if(k) localStorage.setItem(ANTHROPIC_KEY_STORAGE, k); else localStorage.removeItem(ANTHROPIC_KEY_STORAGE); }
+function getAnthropicKey(){ return (appData && appData.iaConfig && appData.iaConfig.anthropicKey) || ''; }
+function setAnthropicKey(k){ if(!appData.iaConfig) appData.iaConfig={provider:'gemini',geminiKey:'',groqKey:'',anthropicKey:''}; appData.iaConfig.anthropicKey = k||''; }
 
 async function chamarClaudeIA(promptTexto){
   const key = getAnthropicKey();
@@ -600,9 +599,8 @@ async function chamarClaudeIA(promptTexto){
   return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
 }
 
-const GEMINI_KEY_STORAGE = 'maximus-gemini-key';
-function getGeminiKey(){ return localStorage.getItem(GEMINI_KEY_STORAGE) || ''; }
-function setGeminiKey(k){ if(k) localStorage.setItem(GEMINI_KEY_STORAGE, k); else localStorage.removeItem(GEMINI_KEY_STORAGE); }
+function getGeminiKey(){ return (appData && appData.iaConfig && appData.iaConfig.geminiKey) || ''; }
+function setGeminiKey(k){ if(!appData.iaConfig) appData.iaConfig={provider:'gemini',geminiKey:'',groqKey:'',anthropicKey:''}; appData.iaConfig.geminiKey = k||''; }
 
 async function chamarGeminiIA(promptTexto){
   const key = getGeminiKey();
@@ -625,13 +623,11 @@ async function chamarGeminiIA(promptTexto){
   return text.trim();
 }
 
-const IA_PROVIDER_STORAGE = 'maximus-ia-provider';
-function getIAProvider(){ return localStorage.getItem(IA_PROVIDER_STORAGE) || 'gemini'; }
-function setIAProvider(p){ localStorage.setItem(IA_PROVIDER_STORAGE, p); }
+function getIAProvider(){ return (appData && appData.iaConfig && appData.iaConfig.provider) || 'gemini'; }
+function setIAProvider(p){ if(!appData.iaConfig) appData.iaConfig={provider:'gemini',geminiKey:'',groqKey:'',anthropicKey:''}; appData.iaConfig.provider = p; }
 
-const GROQ_KEY_STORAGE = 'maximus-groq-key';
-function getGroqKey(){ return localStorage.getItem(GROQ_KEY_STORAGE) || ''; }
-function setGroqKey(k){ if(k) localStorage.setItem(GROQ_KEY_STORAGE, k); else localStorage.removeItem(GROQ_KEY_STORAGE); }
+function getGroqKey(){ return (appData && appData.iaConfig && appData.iaConfig.groqKey) || ''; }
+function setGroqKey(k){ if(!appData.iaConfig) appData.iaConfig={provider:'gemini',geminiKey:'',groqKey:'',anthropicKey:''}; appData.iaConfig.groqKey = k||''; }
 
 async function chamarGroqIA(promptTexto, model){
   const key = getGroqKey();
@@ -1205,6 +1201,7 @@ function migrateAppData(){
   if(!appData.users) appData.users = [];
   if(!appData.students) appData.students = [];
   if(!appData.entries) appData.entries = {};
+  if(!appData.iaConfig) appData.iaConfig = {provider:'gemini', geminiKey:'', groqKey:'', anthropicKey:''};
   if(!appData.escolas || appData.escolas.length===0){
     appData.escolas = [
       {id:uid(), nome:'EMEB Prof. Evânia Rodrigues Da Silva (Caic)', rede:'municipal'},
@@ -2962,10 +2959,11 @@ function wireAppListeners(selected, canEdit, isDev){
     uiState.userEscolaFiltro = e.target.value; renderApp();
   });
   wirePwToggles();
-  document.getElementById('btn-save-ia-config')?.addEventListener('click', ()=>{
+  document.getElementById('btn-save-ia-config')?.addEventListener('click', async ()=>{
     setIAProvider(document.getElementById('ia-provider-select').value);
     setGeminiKey(document.getElementById('ia-gemini-key').value.trim());
     setGroqKey(document.getElementById('ia-groq-key').value.trim());
+    await persistImmediate();
     const msg = document.getElementById('ia-config-saved-msg');
     msg.style.display = 'block';
     setTimeout(()=>{ msg.style.display = 'none'; }, 3000);
@@ -3603,6 +3601,25 @@ function openEntryModal(existing, defaultDate, student){
     persist(); close(); renderApp();
   });
 }
+
+/* ============ impressão: evita corte de texto em textareas ============ */
+let _printTextareaSnapshots = [];
+window.addEventListener('beforeprint', ()=>{
+  _printTextareaSnapshots = [];
+  document.querySelectorAll('textarea').forEach(ta=>{
+    _printTextareaSnapshots.push({el:ta, height:ta.style.height, overflow:ta.style.overflow});
+    ta.style.height = 'auto';
+    ta.style.height = (ta.scrollHeight + 4) + 'px';
+    ta.style.overflow = 'hidden';
+  });
+});
+window.addEventListener('afterprint', ()=>{
+  _printTextareaSnapshots.forEach(s=>{
+    s.el.style.height = s.height;
+    s.el.style.overflow = s.overflow;
+  });
+  _printTextareaSnapshots = [];
+});
 
 /* ============ init ============ */
 initApp();
