@@ -328,7 +328,9 @@ async function hashPassword(pw, salt){ return sha256Hex(salt+':'+pw); }
 async function hashAnswer(ans){ return sha256Hex((ans||'').trim().toLowerCase()); }
 // SHA-256 hash of the Developer master password — the plaintext is never stored in this file.
 const DEV_MASTER_HASH = '683f6f7ff446a1e57cdb0aca97173b40917886a9d768aa126f6ca6b28595830d';
-const MERCADOPAGO_LINK = 'https://mpago.li/23EckiX';
+const MERCADOPAGO_LINK = 'https://mpago.la/12dstcF';
+const PLANO_VALOR = 'R$ 29,90';
+const PLANO_PERIODICIDADE = 'por mês';
 const DIAS_ASSINATURA = 30;
 function diasRestantes(expiraTs){
   if(!expiraTs) return null;
@@ -1510,11 +1512,25 @@ function renderSignupPending(){
   const user = authTemp.pendingNotifyUser;
   const msg = `Olá! Acabei de criar uma conta no Caderno de Campo Máximus.\nNome: ${user.nome}\nPerfil: ${ROLE_LABEL[user.role]}\nEscola: ${user.escola||'-'}\nPoderia aprovar meu acesso? Obrigado!`;
   const waLink = `https://wa.me/5566996641404?text=${encodeURIComponent(msg)}`;
+  const whatsIcon = `<svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:-5px; margin-right:6px;"><circle cx="16" cy="16" r="16" fill="#ffffff"/><path d="M23.5 8.5C21.4 6.4 18.6 5.2 15.7 5.2c-6.1 0-11 4.9-11 11 0 1.9.5 3.8 1.5 5.4L4.6 27l5.6-1.5c1.6.9 3.4 1.3 5.2 1.3h0c6.1 0 11-4.9 11-11 0-2.9-1.2-5.7-3.3-7.8l0 0zM15.7 24.8h0c-1.6 0-3.2-.4-4.6-1.3l-.3-.2-3.3.9.9-3.2-.2-.3c-.9-1.5-1.4-3.2-1.4-4.9 0-5.1 4.2-9.3 9.4-9.3 2.5 0 4.9 1 6.6 2.8 1.8 1.8 2.7 4.1 2.7 6.6 0 5.2-4.3 9.3-9.4 9.3zm5.1-7c-.3-.1-1.7-.8-1.9-.9-.3-.1-.4-.1-.6.1-.2.3-.7.9-.8 1-.2.2-.3.2-.5.1-.3-.1-1.2-.4-2.2-1.4-.8-.7-1.4-1.6-1.5-1.9-.2-.3 0-.4.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.1-.6-1.5-.8-2-.2-.5-.4-.4-.6-.5-.2 0-.3 0-.5 0-.2 0-.5.1-.7.3-.3.3-1 1-1 2.3 0 1.4 1 2.7 1.1 2.9.1.2 2 3 4.8 4.3.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.2-.2-.2-.5-.3z" fill="#25D366"/></svg>`;
   authShell(`
     <div class="serif" style="text-align:center;font-size:19px;margin-bottom:6px;">🎉 Conta criada!</div>
     <div class="auth-info" style="text-align:center;">Faltam só 2 passos rápidos para liberar seu acesso.</div>
 
-    <div style="border:2px solid #C9A227; border-radius:14px; padding:18px; margin:18px 0 14px; background:linear-gradient(135deg,#FFFBF0,#FFF3D6);">
+    <div style="border:1px solid #E6DCC0; border-radius:14px; padding:16px 18px; margin:16px 0; background:#FFFEFB;">
+      <div style="font-size:11px; font-weight:800; color:var(--gold-deep); letter-spacing:.6px; text-transform:uppercase; margin-bottom:10px; text-align:center;">Detalhes da assinatura</div>
+      <div style="display:flex; align-items:baseline; justify-content:center; gap:6px; margin-bottom:10px;">
+        <span class="serif" style="font-size:30px; font-weight:800; color:#1E1C16;">${PLANO_VALOR}</span>
+        <span style="font-size:13px; color:var(--dim);">${PLANO_PERIODICIDADE}</span>
+      </div>
+      <div style="border-top:1px dashed #E6DCC0; padding-top:10px; display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--ink);">
+        <div>🔄 <strong>Renovação:</strong> a cada 30 dias, a contar da data do pagamento</div>
+        <div>💳 <strong>Forma de pagamento:</strong> Cartão de crédito (via Mercado Pago)</div>
+        <div>✅ <strong>Cancelamento:</strong> quando quiser, sem multa</div>
+      </div>
+    </div>
+
+    <div style="border:2px solid #C9A227; border-radius:14px; padding:18px; margin-bottom:14px; background:linear-gradient(135deg,#FFFBF0,#FFF3D6);">
       <div style="font-size:13px; font-weight:800; color:#9C7209; letter-spacing:.5px; text-transform:uppercase; margin-bottom:10px; text-align:center;">Passo 1 de 2</div>
       <a href="${MERCADOPAGO_LINK}" target="_blank" rel="noopener" style="display:block; width:100%; padding:18px 0; text-align:center; text-decoration:none; box-sizing:border-box; background:linear-gradient(180deg,#EFD583,#C9A227); color:#241c06; font-weight:800; font-size:17px; border-radius:10px; border:2px solid #9C7209; box-shadow:0 4px 14px rgba(201,162,39,.35);">💳 PAGAR ASSINATURA</a>
       <div style="font-size:11.5px; color:#8a7332; text-align:center; margin-top:8px;">via Mercado Pago</div>
@@ -1522,7 +1538,7 @@ function renderSignupPending(){
 
     <div style="border:2px solid #25D366; border-radius:14px; padding:18px; margin-bottom:16px; background:#EAFBF1;">
       <div style="font-size:13px; font-weight:800; color:#1B7A43; letter-spacing:.5px; text-transform:uppercase; margin-bottom:10px; text-align:center;">Passo 2 de 2</div>
-      <a href="${waLink}" target="_blank" rel="noopener" style="display:block; width:100%; padding:18px 0; text-align:center; text-decoration:none; box-sizing:border-box; background:#25D366; color:#fff; font-weight:800; font-size:17px; border-radius:10px; border:2px solid #1B7A43; box-shadow:0 4px 14px rgba(37,211,102,.35);">📱 AVISAR PELO WHATSAPP</a>
+      <a href="${waLink}" target="_blank" rel="noopener" style="display:flex; align-items:center; justify-content:center; width:100%; padding:18px 0; text-align:center; text-decoration:none; box-sizing:border-box; background:#25D366; color:#fff; font-weight:800; font-size:17px; border-radius:10px; border:2px solid #1B7A43; box-shadow:0 4px 14px rgba(37,211,102,.35);">${whatsIcon}AVISAR PELO WHATSAPP</a>
       <div style="font-size:11.5px; color:#3a8a5c; text-align:center; margin-top:8px;">a mensagem já vem pronta, é só enviar</div>
     </div>
 
