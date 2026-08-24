@@ -1596,8 +1596,8 @@ function renderMainApp_root(){
   } else if(isGestor){
     escopoStudents = allStudents.filter(s=>s.escola===user.escola);
   } else {
-    // Professor/Auxiliar: only their own registered students (plus legacy records with no owner yet)
-    escopoStudents = allStudents.filter(s=>s.criadoPor===user.id || !s.criadoPor);
+    // Professor/Auxiliar: only their own registered students — strict ownership, no exceptions
+    escopoStudents = allStudents.filter(s=>s.criadoPor===user.id);
   }
 
   const escolasDisponiveis = [...new Set(allStudents.map(s=>s.escola).filter(Boolean))].sort();
@@ -1665,7 +1665,7 @@ function renderMainApp_root(){
               <div class="serif" style="font-size:22px;color:#B8860B;">Selecione um aluno</div>
               <div style="font-size:14px;margin-top:6px;">${canEdit ? 'Ou cadastre um novo aluno para começar o caderno de campo.' : 'Peça a um Professor/Auxiliar para cadastrar um aluno.'}</div>
             </div>
-          ` : renderMainPanel(selected, canEdit)
+          ` : renderMainPanel(selected, canEdit, isDev)
         )}
       </div>
     </div>
@@ -1676,7 +1676,7 @@ function renderMainApp_root(){
 }
 const renderApp = renderMainApp_root;
 
-function renderMainPanel(selected, canEdit){
+function renderMainPanel(selected, canEdit, isDev){
   const monthEntries = (appData.entries[selected.id]||[]).filter(e=>{
     const [y,m] = e.data.split('-').map(Number);
     return y===uiState.calYear && m===uiState.calMonth+1;
@@ -1706,6 +1706,15 @@ function renderMainPanel(selected, canEdit){
           <div><div class="label-mini">Horário de estudo</div><div>${esc(selected.horarioEstudo)||'—'}</div></div>
         </div>
         ${selected.responsavel ? `<div style="margin-top:10px;font-size:12.5px;color:var(--dim);">Acompanhamento: ${esc(selected.responsavel)}</div>` : ''}
+        ${isDev?`
+          <div class="no-print" style="margin-top:12px; padding-top:12px; border-top:1px dashed var(--border-soft); display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="label-mini">Professor(a) responsável (dono do cadastro)</span>
+            <select id="select-owner-student" style="width:auto; font-size:12.5px; padding:6px 8px;">
+              <option value="">— Nenhum atribuído —</option>
+              ${appData.users.filter(u=>u.role==='professor').map(u=>`<option value="${u.id}" ${selected.criadoPor===u.id?'selected':''}>${esc(u.nome)}</option>`).join('')}
+            </select>
+          </div>
+        `:''}
       </div>
 
       ${uiState.view==='relatorio' ? renderMonthlyReport(selected, monthEntries) : uiState.view==='pedagogico' ? renderPedagogicoReport(selected) : uiState.view==='pei' ? renderPEI(selected) : `
@@ -2666,6 +2675,13 @@ function wireAppListeners(selected, canEdit, isDev){
   });
 
   if(!selected) return;
+
+  document.getElementById('select-owner-student')?.addEventListener('change', (e)=>{
+    const novoDono = e.target.value || null;
+    selected.criadoPor = novoDono;
+    appData.students = appData.students.map(s=> s.id===selected.id ? selected : s);
+    persist(); renderApp();
+  });
 
   if(canEdit){
     document.getElementById('btn-edit-student')?.addEventListener('click', ()=> openStudentModal(selected));
