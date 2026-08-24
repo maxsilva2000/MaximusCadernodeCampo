@@ -197,6 +197,16 @@
     textarea{overflow:visible !important; resize:none !important;}
     table.pei-table{break-inside:auto;}
     table.pei-table tr{break-inside:avoid;}
+    /* Formatação ABNT: Arial 12, justificado, espaçamento 1,5 */
+    .printable-area, .printable-area *{
+      font-family: Arial, Helvetica, sans-serif !important;
+      font-size: 12pt !important;
+      line-height: 1.5 !important;
+    }
+    .printable-area td, .printable-area textarea, .printable-area p, .printable-area div{
+      text-align: justify !important;
+    }
+    .printable-area th{ text-align: left !important; }
   }
 </style>
 </head>
@@ -636,18 +646,16 @@ async function chamarGroqIA(promptTexto){
   return ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '').trim();
 }
 
-const PROVIDER_ORDER = ['gemini', 'groq', 'claude'];
-const PROVIDER_LABEL = { gemini:'Gemini', groq:'Groq', claude:'Claude' };
+const PROVIDER_ORDER = ['gemini', 'groq'];
+const PROVIDER_LABEL = { gemini:'Gemini', groq:'Groq' };
 
 function temChaveProvider(provider){
   if(provider==='gemini') return !!getGeminiKey();
-  if(provider==='groq') return !!getGroqKey();
-  return !!getAnthropicKey();
+  return !!getGroqKey();
 }
 async function tentarProvider(provider, promptTexto){
   if(provider==='gemini') return chamarGeminiIA(promptTexto);
-  if(provider==='groq') return chamarGroqIA(promptTexto);
-  return chamarClaudeIA(promptTexto);
+  return chamarGroqIA(promptTexto);
 }
 async function chamarComRetry(provider, promptTexto, tentativas){
   for(let i=1; i<=tentativas; i++){
@@ -2354,7 +2362,6 @@ function renderUserManagement(){
   const usersFiltrados = filtro==='todas' ? appData.users : appData.users.filter(u=>u.escola===filtro);
   const pendentes = appData.users.filter(u=>u.status && u.status!=='ativo');
   const provider = getIAProvider();
-  const claudeKey = getAnthropicKey();
   const geminiKey = getGeminiKey();
   const groqKey = getGroqKey();
   return `
@@ -2369,13 +2376,12 @@ function renderUserManagement(){
         <div class="tab-badge">Configurar IA</div>
         <div class="serif" style="font-size:18px;font-weight:700;color:#B8860B;margin:8px 0 6px;">🤖 Geração de relatórios e pareceres por IA</div>
         <div style="font-size:12px; color:var(--dim); margin-bottom:6px;">A chave fica salva só neste navegador/aparelho — nunca é enviada para o Firebase nem aparece no código do site.</div>
-        <div class="ai-disclaimer" style="margin-bottom:14px;">🔄 <span>Preencha quantas chaves quiser. O app tenta primeiro o "provedor preferido"; se ele falhar (fora do ar, sobrecarregado), tenta automaticamente os outros que tiverem chave configurada, na ordem Gemini → Groq → Claude.</span></div>
+        <div class="ai-disclaimer" style="margin-bottom:14px;">🔄 <span>Preencha as duas chaves (ambas gratuitas). O app tenta primeiro o "provedor preferido"; se ele falhar (fora do ar, sobrecarregado), tenta automaticamente o outro.</span></div>
 
         <label class="field" style="margin-bottom:12px;"><span>Provedor preferido (tentado primeiro)</span>
           <select id="ia-provider-select">
             <option value="gemini" ${provider==='gemini'?'selected':''}>Gemini (Google) — gratuito, dados podem treinar modelos do Google</option>
             <option value="groq" ${provider==='groq'?'selected':''}>Groq (Llama) — gratuito, sem cartão de crédito</option>
-            <option value="claude" ${provider==='claude'?'selected':''}>Claude (Anthropic) — pago por uso, dados não usados para treino</option>
           </select>
         </label>
 
@@ -2392,12 +2398,6 @@ function renderUserManagement(){
             </label>
             <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha gratuitamente em console.groq.com/keys</div>
           </div>
-        </div>
-        <div style="margin-top:12px;">
-          <label class="field"><span>Chave de API — Claude (Anthropic)</span>
-            <div class="pw-wrap"><input type="password" id="ia-claude-key" value="${esc(claudeKey)}" placeholder="sk-ant-..."><button type="button" class="pw-eye" data-toggle-pw="ia-claude-key">👁</button></div>
-          </label>
-          <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha em console.anthropic.com (pago por uso)</div>
         </div>
 
         <button class="btn btn-gold" id="btn-save-ia-config" style="margin-top:14px;">Salvar configuração de IA</button>
@@ -2635,7 +2635,6 @@ function wireAppListeners(selected, canEdit, isDev){
   wirePwToggles();
   document.getElementById('btn-save-ia-config')?.addEventListener('click', ()=>{
     setIAProvider(document.getElementById('ia-provider-select').value);
-    setAnthropicKey(document.getElementById('ia-claude-key').value.trim());
     setGeminiKey(document.getElementById('ia-gemini-key').value.trim());
     setGroqKey(document.getElementById('ia-groq-key').value.trim());
     const msg = document.getElementById('ia-config-saved-msg');
