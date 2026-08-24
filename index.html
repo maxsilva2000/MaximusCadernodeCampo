@@ -421,12 +421,20 @@ function cidContext(cid){
     [/^F90/, 'Recomendam-se estratégias de organização, fragmentação das tarefas e reforço positivo contínuo.'],
     [/^F80/, 'Recomenda-se o uso de recursos de apoio à comunicação e tempo ampliado para resposta.'],
     [/^F81/, 'Recomenda-se a adaptação de materiais de leitura, escrita ou cálculo conforme a necessidade específica.'],
+    [/^F82/, 'É importante o uso de atividades de coordenação motora adaptadas e tempo ampliado para tarefas que exijam planejamento motor.'],
+    [/^F83/, 'As estratégias pedagógicas devem combinar apoios de linguagem, leitura/escrita e organização motora, conforme as áreas afetadas.'],
+    [/^F9[1345]/, 'Recomenda-se acompanhamento próximo do comportamento e das emoções, com combinados claros, previsibilidade de rotina e mediação constante.'],
     [/^G40/, 'É importante manter um ambiente seguro e comunicação constante com a família sobre eventuais episódios.'],
-    [/^G80/, 'São essenciais as adaptações relacionadas à mobilidade, à comunicação e ao acesso físico às atividades propostas.'],
+    [/^G8[012]/, 'São essenciais as adaptações relacionadas à mobilidade, à comunicação e ao acesso físico às atividades propostas.'],
+    [/^G9[13]/, 'É essencial atenção redobrada ao desenvolvimento cognitivo e motor, com apoio individualizado e comunicação constante com a equipe de saúde e a família.'],
     [/^Q90/, 'É relevante o uso de recursos visuais, repetição estruturada e valorização das conquistas individuais ao longo do processo de aprendizagem.'],
     [/^Q05/, 'São essenciais as adaptações relacionadas à mobilidade e à acessibilidade física do ambiente escolar.'],
+    [/^Q(87|99|77)/, 'É importante uma abordagem individualizada, com apoio pedagógico e adaptações conforme as necessidades específicas apresentadas pelo(a) estudante.'],
     [/^H9[01]/, 'É necessário o uso de recursos visuais e, quando aplicável, de Libras como forma de comunicação.'],
     [/^H54/, 'São necessárias adaptações táteis e sonoras nos materiais e nas atividades propostas.'],
+    [/^E(70|84)/, 'É importante o acompanhamento próximo das condições de saúde do(a) estudante, com atenção a fadiga, rotina alimentar (quando aplicável) e adequações no ritmo das atividades.'],
+    [/^R62/, 'É fundamental o suporte individualizado e a observação contínua do desenvolvimento, com estratégias adaptadas ao ritmo próprio do(a) estudante.'],
+    [/^M40/, 'É importante atenção à postura durante as atividades e adaptação do mobiliário quando necessário.'],
   ];
   for(const [re, txt] of map){ if(re.test(c)) return txt; }
   return `As estratégias pedagógicas devem ser adaptadas conforme as necessidades individuais do(a) estudante.`;
@@ -438,12 +446,20 @@ function estrategiasAdaptacao(cid){
   if(/^F90/.test(c)) return 'fragmentação das tarefas em etapas curtas, instruções objetivas, reforço positivo contínuo, pausas programadas e organização visual do tempo e das atividades';
   if(/^F80/.test(c)) return 'apoio à comunicação (recursos visuais, gestuais ou alternativos), repetição e modelagem da linguagem, tempo ampliado para resposta e valorização de todas as formas de expressão do(a) estudante';
   if(/^F81/.test(c)) return 'adaptação de materiais de leitura e escrita, uso de recursos multissensoriais, tempo ampliado, avaliação processual e valorização das estratégias próprias de aprendizagem do(a) estudante';
+  if(/^F82/.test(c)) return 'atividades de coordenação motora fina e ampla adaptadas, tempo ampliado para tarefas manuais, materiais adaptados (lápis engrossado, tesoura adaptada) e valorização do progresso motor individual';
+  if(/^F83/.test(c)) return 'combinação de apoios de linguagem, leitura/escrita e organização motora, com mediação constante e avaliação processual conforme as áreas específicas afetadas';
+  if(/^F9[1345]/.test(c)) return 'combinados claros de convivência, rotina previsível, mediação constante do comportamento e das emoções, reforço positivo e comunicação próxima com a família';
   if(/^G40/.test(c)) return 'ambiente seguro, atenção às condições de segurança durante as atividades, comunicação com a família sobre crises e retomada gradual das atividades após eventuais episódios';
-  if(/^G80/.test(c)) return 'adaptações relacionadas à mobilidade e ao posicionamento, recursos de acessibilidade física, apoio físico quando necessário e adequação dos materiais para a execução motora das atividades';
+  if(/^G8[012]/.test(c)) return 'adaptações relacionadas à mobilidade e ao posicionamento, recursos de acessibilidade física, apoio físico quando necessário e adequação dos materiais para a execução motora das atividades';
+  if(/^G9[13]/.test(c)) return 'acompanhamento individualizado do desenvolvimento cognitivo e motor, apoio constante nas atividades e comunicação próxima com a equipe de saúde e a família';
   if(/^Q05/.test(c)) return 'adaptações relacionadas à mobilidade, acessibilidade física do ambiente e adequação de materiais e mobiliário';
+  if(/^Q(87|99|77)/.test(c)) return 'abordagem individualizada com apoio pedagógico e mediação constante, com adaptações definidas conforme as necessidades específicas apresentadas';
   if(/^H9[01]/.test(c)) return 'uso de recursos visuais, apoio de Libras quando aplicável, posicionamento estratégico em sala e comunicação visual clara das instruções';
   if(/^H54/.test(c)) return 'materiais em Braille ou ampliados quando aplicável, descrição verbal das atividades visuais, recursos táteis e sonoros e organização física do espaço para autonomia de locomoção';
   if(/^Q90/.test(c)) return 'uso de recursos visuais, repetição estruturada, tempo ampliado, valorização das conquistas individuais e atividades que favoreçam a coordenação motora e a autonomia';
+  if(/^E(70|84)/.test(c)) return 'atenção à rotina e às condições de saúde do(a) estudante, ajuste do ritmo das atividades conforme necessário e comunicação próxima com a família';
+  if(/^R62/.test(c)) return 'suporte individualizado, observação contínua do desenvolvimento e estratégias adaptadas ao ritmo próprio do(a) estudante';
+  if(/^M40/.test(c)) return 'atenção à postura durante as atividades, pausas para alongamento quando necessário e adaptação do mobiliário';
   return 'recursos e estratégias adaptados às necessidades específicas do(a) estudante, com mediação individualizada, linguagem acessível e avaliação processual e formativa';
 }
 
@@ -457,19 +473,56 @@ const CID_LIST = [
   {codigo:'F71', legenda:'Deficiência Intelectual Moderada'},
   {codigo:'F72', legenda:'Deficiência Intelectual Grave'},
   {codigo:'F73', legenda:'Deficiência Intelectual Profunda'},
-  {codigo:'F80', legenda:'Transtornos Específicos do Desenvolvimento da Fala e da Linguagem'},
-  {codigo:'F81', legenda:'Transtornos Específicos do Desenvolvimento das Habilidades Escolares'},
+  {codigo:'F78', legenda:'Outras Deficiências Intelectuais'},
+  {codigo:'F79', legenda:'Deficiência Intelectual Não Especificada'},
+  {codigo:'F80.0', legenda:'Transtorno Específico da Articulação da Fala'},
+  {codigo:'F80.1', legenda:'Transtorno Expressivo da Linguagem'},
+  {codigo:'F80.2', legenda:'Transtorno Receptivo da Linguagem'},
+  {codigo:'F80.9', legenda:'Transtorno do Desenvolvimento da Fala ou da Linguagem Não Especificado'},
+  {codigo:'F81.0', legenda:'Transtorno Específico de Leitura (Dislexia)'},
+  {codigo:'F81.1', legenda:'Transtorno Específico da Soletração (Disortografia)'},
+  {codigo:'F81.2', legenda:'Transtorno Específico da Habilidade em Aritmética (Discalculia)'},
+  {codigo:'F81.3', legenda:'Transtorno Misto das Habilidades Escolares'},
+  {codigo:'F81.8', legenda:'Outros Transtornos do Desenvolvimento das Habilidades Escolares (inclui Disgrafia)'},
+  {codigo:'F82', legenda:'Transtorno Específico do Desenvolvimento Motor (Dispraxia)'},
+  {codigo:'F83', legenda:'Transtornos Específicos do Desenvolvimento Misto'},
   {codigo:'F84.0', legenda:'Autismo Infantil (Transtorno do Espectro Autista)'},
   {codigo:'F84.1', legenda:'Autismo Atípico'},
+  {codigo:'F84.2', legenda:'Síndrome de Rett'},
+  {codigo:'F84.3', legenda:'Outro Transtorno Desintegrativo da Infância'},
   {codigo:'F84.5', legenda:'Síndrome de Asperger'},
+  {codigo:'F84.8', legenda:'Outros Transtornos Globais do Desenvolvimento'},
+  {codigo:'F84.9', legenda:'Transtorno Global do Desenvolvimento Não Especificado'},
   {codigo:'F90', legenda:'Transtornos Hipercinéticos (TDAH)'},
+  {codigo:'F90.0', legenda:'Distúrbio da Atividade e da Atenção (TDAH)'},
+  {codigo:'F91', legenda:'Transtornos de Conduta'},
+  {codigo:'F93', legenda:'Transtornos Emocionais com Início Específico na Infância'},
+  {codigo:'F94', legenda:'Transtornos do Funcionamento Social com Início Específico na Infância ou Adolescência'},
+  {codigo:'F95', legenda:'Transtornos de Tique'},
+  {codigo:'F98.0', legenda:'Enurese de Origem Não Orgânica'},
   {codigo:'G40', legenda:'Epilepsia'},
   {codigo:'G80', legenda:'Paralisia Cerebral'},
+  {codigo:'G80.0', legenda:'Paralisia Cerebral Quadriplégica Espástica'},
+  {codigo:'G80.1', legenda:'Paralisia Cerebral Diplégica Espástica'},
+  {codigo:'G80.2', legenda:'Paralisia Cerebral Hemiplégica Espástica'},
+  {codigo:'G81', legenda:'Hemiplegia'},
+  {codigo:'G82', legenda:'Paraplegia e Tetraplegia'},
+  {codigo:'G91', legenda:'Hidrocefalia'},
+  {codigo:'G93', legenda:'Outros Transtornos Encefálicos'},
   {codigo:'H90', legenda:'Perda de Audição Condutiva e Neurossensorial (Surdez)'},
   {codigo:'H91', legenda:'Outras Perdas de Audição'},
   {codigo:'H54', legenda:'Cegueira e Baixa Visão'},
+  {codigo:'H54.0', legenda:'Cegueira Bilateral'},
+  {codigo:'H54.2', legenda:'Baixa Visão Bilateral'},
   {codigo:'Q90', legenda:'Síndrome de Down'},
   {codigo:'Q05', legenda:'Espinha Bífida'},
+  {codigo:'Q87', legenda:'Outras Síndromes com Malformações Congênitas (ex: Síndrome de Williams, Angelman)'},
+  {codigo:'Q99', legenda:'Outras Anomalias dos Cromossomos, Não Classificadas em Outra Parte'},
+  {codigo:'Q77', legenda:'Osteocondrodisplasia com Anomalias do Crescimento (ex: Acondroplasia)'},
+  {codigo:'E70', legenda:'Distúrbios do Metabolismo dos Aminoácidos Aromáticos (ex: Fenilcetonúria)'},
+  {codigo:'E84', legenda:'Fibrose Cística'},
+  {codigo:'R62', legenda:'Atraso do Desenvolvimento Neuropsicomotor'},
+  {codigo:'M40', legenda:'Cifose e Lordose (Desvios de Postura da Coluna)'},
 ];
 
 const UNIDADES_TEMATICAS = {
@@ -3366,7 +3419,12 @@ function openStudentModal(existing){
           <label class="field"><span>Série / turma</span><input id="f-serie" value="${esc(f.serie)}" placeholder="Ex: 5º Ano H"></label>
           <label class="field"><span>Escola</span><input id="f-escola" value="${esc(f.escola)}" placeholder="Ex: E.E.C.M. Joaquim Nunes Rocha" list="escolas-list"></label>
           <datalist id="escolas-list">${escolas.map(e=>`<option value="${esc(e)}">`).join('')}</datalist>
-          <label class="field"><span>CID</span><input id="f-cid" value="${esc(f.cid)}" placeholder="Ex: F84.0"></label>
+          <label class="field full"><span>CID</span><input id="f-cid" value="${esc(f.cid)}" placeholder="Digite ou escolha, ex: F84.0" list="cid-list-datalist" autocomplete="off"></label>
+          <datalist id="cid-list-datalist">${CID_LIST.map(c=>`<option value="${esc(c.codigo)}">${esc(c.codigo)} — ${esc(c.legenda)}</option>`).join('')}</datalist>
+          <div class="field full" id="cid-desc-wrap" style="display:${f.cid?'block':'none'}; margin-top:-8px;">
+            <div class="label-mini">Descrição do CID</div>
+            <div id="cid-desc-text" style="font-size:12.5px; color:var(--dim); background:var(--panel-alt); border:1px solid var(--border-soft); border-radius:8px; padding:8px 10px; margin-top:4px;"></div>
+          </div>
           <label class="field"><span>Horário de estudo</span><input id="f-horario" value="${esc(f.horarioEstudo)}" placeholder="Ex: Vespertino, 13h–17h"></label>
           <label class="field full"><span>Responsável pelo acompanhamento</span><input id="f-resp" value="${esc(f.responsavel)}" placeholder="Ex: Assistente de Educação Especial"></label>
         </div>
@@ -3380,6 +3438,21 @@ function openStudentModal(existing){
   const close = ()=>{ mr.innerHTML=''; };
   document.getElementById('btn-cancel-student').addEventListener('click', close);
   document.getElementById('ov-student').addEventListener('click', (e)=>{ if(e.target.id==='ov-student') close(); });
+
+  const cidInput = document.getElementById('f-cid');
+  const cidDescWrap = document.getElementById('cid-desc-wrap');
+  const cidDescText = document.getElementById('cid-desc-text');
+  const updateCidDesc = ()=>{
+    const val = (cidInput.value||'').trim();
+    if(!val){ cidDescWrap.style.display='none'; return; }
+    const found = CID_LIST.find(c=>c.codigo.toUpperCase()===val.toUpperCase());
+    const desc = (found?`${found.legenda}. `:'') + cidContext(val);
+    cidDescText.textContent = desc;
+    cidDescWrap.style.display = 'block';
+  };
+  cidInput.addEventListener('input', updateCidDesc);
+  cidInput.addEventListener('change', updateCidDesc);
+  updateCidDesc();
 
   const previewWrap = document.getElementById('photo-preview-wrap');
   const removeBtn = document.getElementById('btn-remove-photo');
