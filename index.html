@@ -750,6 +750,16 @@ CID/condição do(a) estudante: ${cidLegendas.join('; ')||'não informado'}
 Escreva um texto descrevendo as dificuldades e necessidades de apoio comumente associadas a essa condição no contexto escolar, de forma pedagógica e respeitosa, evitando linguagem clínica excessiva ou estigmatizante. NÃO repita o nome do diagnóstico como "trata-se de aluno com deficiência X" — vá direto às dificuldades observáveis no cotidiano escolar. São características frequentemente associadas a essa condição, adaptáveis ao perfil individual do(a) estudante — não afirme fatos específicos que você não pode saber sobre este(a) estudante em particular. Texto corrido, 3 a 5 linhas, português do Brasil, sem markdown.`;
 }
 
+function montarPromptSugestaoAdaptada(turmaTextos, cidLegendas, componente){
+  const turmaTxt = turmaTextos.length ? turmaTextos.join('; ') : '(nenhuma habilidade selecionada para a turma ainda)';
+  return `Você é um especialista em BNCC e educação inclusiva. A habilidade de referência selecionada para a turma em "${componente}" é:
+${turmaTxt}
+
+O(a) estudante apresenta: ${cidLegendas.join('; ')||'CID não informado'}
+
+Sugira uma frase curta de busca (2 a 4 palavras, em português, sem pontuação, sem explicação, sem numeração) que ajude a localizar, numa base de habilidades da BNCC de qualquer etapa (Educação Infantil, Ensino Fundamental 1, Fundamental 2 ou Médio), uma habilidade EQUIVALENTE mas de nível mais básico/adaptado, adequada às necessidades do(a) estudante, mantendo relação com a habilidade de referência da turma. Responda APENAS com a frase de busca.`;
+}
+
 function montarPromptComponentePEI(componente, cidLegendas, potenc, dific, habilidadesTurmaTexto){
   const habilidadesTxt = (habilidadesTurmaTexto && habilidadesTurmaTexto.length) ? habilidadesTurmaTexto.join('; ') : '(nenhuma habilidade BNCC selecionada ainda para a turma)';
   return `Você é um profissional de educação especial brasileiro elaborando a parte de "${componente}" dentro de um Plano Educacional Individualizado (PEI) oficial, alinhado à BNCC.
@@ -2088,10 +2098,12 @@ function renderPEI(student){
   `;
 }
 
-function renderBNCCPicker(componente, label, wrapperId){
+function renderBNCCPicker(componente, label, wrapperId, sugerirUid){
+  const suggestBtn = sugerirUid ? `<button type="button" class="btn btn-gold no-print" data-ia-sugerir-adaptada="${sugerirUid}" data-componente-sugerir="${esc(componente)}" style="margin-bottom:6px;">🤖 Sugerir com IA (baseado na turma)</button>` : '';
   return `
     <div>
       <div class="label-mini" style="color:var(--dim); margin-bottom:4px;">${esc(label)}</div>
+      ${suggestBtn}
       <div class="bncc-picker" ${wrapperId?`id="${esc(wrapperId)}"`:''} data-componente="${esc(componente)}">
         <input type="text" class="bncc-search no-print" placeholder="Buscar por código ou palavra-chave...">
         <div class="bncc-results no-print"></div>
@@ -2168,7 +2180,7 @@ function buildSubjectTableRows(componente, cidCodigos, modeloEstadual){
   const bloco = gerarBlocoComponente(componente, cidCodigos.length?cidCodigos:['']);
   const uid = 'subj'+(peiSubjectCounter++);
   const pickerTurma = renderBNCCPicker(componente, 'Buscar e adicionar habilidade(s)', 'turma-'+uid);
-  const pickerAdaptada = renderBNCCPicker(componente, 'Buscar e adicionar habilidade(s) adaptada(s) — pode escolher de qualquer etapa/ano');
+  const pickerAdaptada = renderBNCCPicker(componente, 'Buscar e adicionar habilidade(s) adaptada(s) — pode escolher de qualquer etapa/ano', 'adaptada-'+uid, uid);
   const iaBtnRow = `<tr class="no-print"><td colspan="2" style="text-align:right; background:var(--panel-alt);"><button type="button" class="btn btn-gold" data-ia-componente="${uid}" data-componente-nome="${esc(componente)}">🤖 Gerar conteúdo com IA</button></td></tr>`;
   if(modeloEstadual){
     return `
@@ -2736,7 +2748,7 @@ function wireAppListeners(selected, canEdit, isDev){
         const texto = await chamarIA(prompt);
         document.getElementById('pei-parecer-text').value = texto;
       }catch(e){
-        if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
+        if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
         else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
         else alert('Erro ao gerar com IA: ' + e.message);
       }finally{
@@ -2777,7 +2789,7 @@ function wireAppListeners(selected, canEdit, isDev){
           if(metEl && parsed.metodologia){ metEl.value = parsed.metodologia; metEl.dispatchEvent(new Event('input')); }
           if(avalEl && parsed.avaliacao){ avalEl.value = parsed.avaliacao; avalEl.dispatchEvent(new Event('input')); }
         }catch(e){
-          if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
+          if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
           else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
         else alert('Erro ao gerar com IA: ' + e.message);
         }finally{
@@ -2803,11 +2815,51 @@ function wireAppListeners(selected, canEdit, isDev){
           const el = document.getElementById(targetId);
           if(el){ el.value = texto; el.dispatchEvent(new Event('input')); }
         }catch(e){
-          if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
+          if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
           else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
           else alert('Erro ao gerar com IA: ' + e.message);
         }finally{
           btn.disabled = false; btn.textContent = '🤖 Gerar com IA';
+        }
+      });
+    });
+  }
+
+  function wireIASugerirAdaptadaButtons(){
+    document.querySelectorAll('[data-ia-sugerir-adaptada]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const uid = btn.dataset.iaSugerirAdaptada;
+        const componente = btn.dataset.componenteSugerir;
+        const f = uiState.peiForm;
+        if(!f) return;
+        const turmaWrap = document.getElementById('turma-'+uid);
+        const turmaTextos = turmaWrap ? Array.from(turmaWrap.querySelectorAll('.bncc-chip')).map(chip=>{
+          const cod = chip.dataset.codigo;
+          const pool = BNCC_SKILLS[componente] || [];
+          const found = pool.find(s=>s.codigo===cod);
+          return found ? found.texto : cod;
+        }) : [];
+        if(turmaTextos.length===0){ alert('Selecione primeiro ao menos uma habilidade para a turma — a sugestão usa ela como referência.'); return; }
+        const cidCodigos = [...f.cids];
+        if(f.cidCustom && f.cidCustom.trim()) cidCodigos.push(f.cidCustom.trim().toUpperCase());
+        const cidLegendas = cidCodigos.map(c=>{ const found = CID_LIST.find(x=>x.codigo===c); return found?`${found.codigo} — ${found.legenda}`:c; });
+        const prompt = montarPromptSugestaoAdaptada(turmaTextos, cidLegendas, componente);
+        btn.disabled = true; btn.textContent = 'Buscando…';
+        try{
+          const frase = await chamarIA(prompt);
+          const adaptWrap = document.getElementById('adaptada-'+uid);
+          const searchInput = adaptWrap ? adaptWrap.querySelector('.bncc-search') : null;
+          if(searchInput){
+            searchInput.value = frase.trim().replace(/["'.]/g,'');
+            searchInput.dispatchEvent(new Event('input'));
+            searchInput.scrollIntoView({behavior:'smooth', block:'center'});
+          }
+        }catch(e){
+          if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
+          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+          else alert('Erro ao buscar sugestão: ' + e.message);
+        }finally{
+          btn.disabled = false; btn.textContent = '🤖 Sugerir com IA (baseado na turma)';
         }
       });
     });
@@ -2833,6 +2885,7 @@ function wireAppListeners(selected, canEdit, isDev){
       wireIAParecerButton();
       wireIAComponenteButtons();
       wireIADificuldadesButtons();
+      wireIASugerirAdaptadaButtons();
       autosizeAllTextareas('pei-output');
     }
   }
@@ -2872,6 +2925,7 @@ function wireAppListeners(selected, canEdit, isDev){
     wireIAParecerButton();
       wireIAComponenteButtons();
       wireIADificuldadesButtons();
+      wireIASugerirAdaptadaButtons();
     autosizeAllTextareas('pei-output');
     wrap.style.display = 'block';
     wrap.scrollIntoView({behavior:'smooth'});
@@ -2892,7 +2946,7 @@ function wireAppListeners(selected, canEdit, isDev){
       ta.value = texto;
       ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
     }catch(e){
-      if(e.message==='NO_KEY') alert('Configure sua chave de IA (Claude ou Gemini) em "Gerenciar usuários" antes de usar essa opção.');
+      if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
       else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
         else alert('Erro ao gerar com IA: ' + e.message);
     }finally{
