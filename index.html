@@ -1343,6 +1343,18 @@ function emptyData(){
   };
 }
 function currentUser(){ return appData.users.find(u=>u.id===session.userId) || null; }
+function contarNotificacoesNaoLidas(){
+  if(!appData || !appData.notificacoes || !appData.notificacoes.length) return 0;
+  const key = 'maximus-last-seen-notif-' + (session.userId||'anon');
+  const lastSeen = Number(localStorage.getItem(key) || 0);
+  return appData.notificacoes.filter(n=> n.data > lastSeen).length;
+}
+function marcarNotificacoesComoVistas(){
+  if(!appData || !appData.notificacoes || !appData.notificacoes.length) return;
+  const key = 'maximus-last-seen-notif-' + (session.userId||'anon');
+  const maisRecente = Math.max(...appData.notificacoes.map(n=>n.data));
+  localStorage.setItem(key, String(maisRecente));
+}
 
 function hideSplash(){
   const s = document.getElementById('splash');
@@ -1353,7 +1365,9 @@ function migrateAppData(){
   if(!appData.users) appData.users = [];
   if(!appData.students) appData.students = [];
   if(!appData.entries) appData.entries = {};
-  if(!appData.iaConfig) appData.iaConfig = {provider:'gemini', geminiKey:'', groqKey:'', anthropicKey:''};
+  if(!appData.notificacoes) appData.notificacoes = [];
+  if(!appData.mensagensSuporte) appData.mensagensSuporte = [];
+  if(!appData.iaConfig) appData.iaConfig = {provider:'claude', geminiKey:'', groqKey:'', anthropicKey:''};
   if(!appData.escolas || appData.escolas.length===0){
     appData.escolas = [
       {id:uid(), nome:'EMEB Prof. Evânia Rodrigues Da Silva (Caic)', rede:'municipal'},
@@ -2144,6 +2158,7 @@ function renderMainApp_root(){
           <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
             <span style="font-size:12.5px;">${esc(user.nome)}</span>
             <span class="role-pill ${user.role}">${ROLE_LABEL[user.role]}</span>
+            <button class="btn" id="btn-notificacoes" style="position:relative;" title="Notificações e suporte">🔔${(()=>{ const n=contarNotificacoesNaoLidas(); return n>0?`<span style="position:absolute; top:-6px; right:-6px; background:#B23A2E; color:#fff; border-radius:10px; font-size:10px; padding:1px 5px; line-height:1.4;">${n}</span>`:''; })()}</button>
             <button class="btn" id="btn-logout">Sair</button>
           </div>
         </div>
@@ -2943,6 +2958,7 @@ function renderUserManagement(){
                     const btnLabel = (dias===null || vencido) ? 'Marcar como pago (30 dias)' : 'Renovar +30 dias';
                     return `
                       <span style="display:block; margin-bottom:4px;">${statusTxt}</span>
+                      ${u.cancelamentoSolicitado?`<span style="display:block; margin-bottom:4px; color:#B23A2E; font-weight:700;">🔴 Cancelamento solicitado</span>`:''}
                       <button class="btn" data-pay-user="${u.id}">${btnLabel}</button>
                       ${dias!==null?`<button class="btn btn-danger" data-revoke-user="${u.id}" style="margin-left:4px;">Revogar</button>`:''}
                     `;
@@ -3014,12 +3030,125 @@ function renderEscolasManagement(){
   `;
 }
 
+/* ============ notificações / assinatura / fale com o desenvolvedor ============ */
+function openNotificacoesModal(){
+  const mr = document.getElementById('modal-root');
+  const user = currentUser();
+  const isDev = user && user.role==='desenvolvedor';
+  const notifs = (appData.notificacoes||[]).slice().sort((a,b)=> b.data-a.data);
+  const mensagens = (appData.mensagensSuporte||[]).slice().sort((a,b)=> b.data-a.data);
+  const dias = user ? diasRestantes(user.pagamentoExpira) : null;
+  let statusAssinaturaTxt;
+  if(isDev) statusAssinaturaTxt = '';
+  else if(user && user.cancelamentoSolicitado) statusAssinaturaTxt = `🔴 Cancelamento solicitado em ${fmtDateBR(new Date(user.cancelamentoData).toISOString().slice(0,10))}. Seu acesso continua válido até o fim do período já pago.`;
+  else if(dias===null) statusAssinaturaTxt = 'Nenhum pagamento registrado ainda.';
+  else if(dias<0) statusAssinaturaTxt = '🔴 Assinatura vencida.';
+  else statusAssinaturaTxt = `✅ Válida por ${dias} dia(s) (até ${fmtDateBR(new Date(user.pagamentoExpira).toISOString().slice(0,10))}).`;
+
+  mr.innerHTML = `
+    <div class="overlay" id="ov-notif">
+      <div class="modal" style="max-width:520px;">
+        <h3 class="serif">🔔 Notificações</h3>
+
+        ${isDev?`
+          <div class="card" style="margin-bottom:16px;">
+            <div class="label-mini">Enviar notificação para todos os usuários</div>
+            <label class="field" style="margin-top:8px;"><span>Título</span><input id="f-notif-titulo" placeholder="Ex: Sistema em manutenção"></label>
+            <label class="field" style="margin-top:8px;"><span>Mensagem</span><textarea id="f-notif-mensagem" rows="3" placeholder="Ex: O sistema ficará indisponível hoje à noite entre 22h e 23h para atualização."></textarea></label>
+            <button class="btn btn-gold" id="btn-enviar-notificacao" style="margin-top:10px;">Enviar notificação</button>
+          </div>
+        `:''}
+
+        <div class="label-mini">Avisos do sistema</div>
+        <div style="max-height:180px; overflow-y:auto; margin:8px 0 16px; border:1px solid var(--border-soft); border-radius:8px;">
+          ${notifs.length===0?`<div style="padding:14px; font-size:12.5px; color:var(--dim);">Nenhum aviso no momento.</div>`:notifs.map(n=>`
+            <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft);">
+              <div style="font-weight:700; font-size:13px;">${esc(n.titulo)}</div>
+              <div style="font-size:12.5px; margin-top:2px;">${esc(n.mensagem)}</div>
+              <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(n.data).toISOString().slice(0,10))}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        ${!isDev?`
+          <div class="label-mini">Minha assinatura</div>
+          <div style="font-size:12.5px; margin:8px 0 10px;">${statusAssinaturaTxt}</div>
+          ${user && !user.cancelamentoSolicitado ? `<button class="btn btn-danger" id="btn-cancelar-assinatura">Cancelar assinatura</button>` : ''}
+          ${user && user.cancelamentoSolicitado ? `<button class="btn" id="btn-desfazer-cancelamento">Desfazer cancelamento</button>` : ''}
+
+          <div class="label-mini" style="margin-top:18px;">Fale com o desenvolvedor</div>
+          <label class="field" style="margin-top:8px;"><span>Sua mensagem</span><textarea id="f-msg-dev" rows="3" placeholder="Descreva o problema ou dúvida..."></textarea></label>
+          <button class="btn btn-gold" id="btn-enviar-msg-dev" style="margin-top:10px;">Enviar mensagem</button>
+        `:`
+          <div class="label-mini">Mensagens recebidas dos usuários</div>
+          <div style="max-height:200px; overflow-y:auto; margin-top:8px; border:1px solid var(--border-soft); border-radius:8px;">
+            ${mensagens.length===0?`<div style="padding:14px; font-size:12.5px; color:var(--dim);">Nenhuma mensagem recebida.</div>`:mensagens.map(m=>`
+              <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft);">
+                <div style="font-weight:700; font-size:12.5px;">${esc(m.usuarioNome)} <span style="font-weight:400; color:var(--dim);">(${ROLE_LABEL[m.usuarioRole]||m.usuarioRole})</span></div>
+                <div style="font-size:12.5px; margin-top:2px;">${esc(m.mensagem)}</div>
+                <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(m.data).toISOString().slice(0,10))}</div>
+              </div>
+            `).join('')}
+          </div>
+        `}
+
+        <div style="display:flex; justify-content:flex-end; margin-top:18px;">
+          <button class="btn" id="btn-fechar-notif">Fechar</button>
+        </div>
+      </div>
+    </div>
+  `;
+  const close = ()=>{ mr.innerHTML=''; };
+  document.getElementById('btn-fechar-notif').addEventListener('click', close);
+  document.getElementById('ov-notif').addEventListener('click', (e)=>{ if(e.target.id==='ov-notif') close(); });
+
+  document.getElementById('btn-enviar-notificacao')?.addEventListener('click', async ()=>{
+    const titulo = document.getElementById('f-notif-titulo').value.trim();
+    const mensagem = document.getElementById('f-notif-mensagem').value.trim();
+    if(!titulo || !mensagem){ alert('Preencha o título e a mensagem.'); return; }
+    if(!appData.notificacoes) appData.notificacoes = [];
+    appData.notificacoes.push({ id: uid(), titulo, mensagem, data: Date.now(), autor: user.nome });
+    await persistImmediate();
+    close(); openNotificacoesModal();
+  });
+
+  document.getElementById('btn-cancelar-assinatura')?.addEventListener('click', async ()=>{
+    if(!confirm('Isso vai solicitar o cancelamento da renovação da sua assinatura. Seu acesso continua válido até o fim do período já pago. Deseja continuar?')) return;
+    user.cancelamentoSolicitado = true;
+    user.cancelamentoData = Date.now();
+    await persistImmediate();
+    close(); openNotificacoesModal();
+  });
+
+  document.getElementById('btn-desfazer-cancelamento')?.addEventListener('click', async ()=>{
+    user.cancelamentoSolicitado = false;
+    user.cancelamentoData = null;
+    await persistImmediate();
+    close(); openNotificacoesModal();
+  });
+
+  document.getElementById('btn-enviar-msg-dev')?.addEventListener('click', async ()=>{
+    const mensagem = document.getElementById('f-msg-dev').value.trim();
+    if(!mensagem){ alert('Escreva uma mensagem antes de enviar.'); return; }
+    if(!appData.mensagensSuporte) appData.mensagensSuporte = [];
+    appData.mensagensSuporte.push({ id: uid(), usuarioId: user.id, usuarioNome: user.nome, usuarioRole: user.role, mensagem, data: Date.now() });
+    await persistImmediate();
+    close();
+    alert('Mensagem enviada ao desenvolvedor.');
+  });
+
+  marcarNotificacoesComoVistas();
+  renderApp();
+}
+
 /* ============ wiring ============ */
 function wireAppListeners(selected, canEdit, isDev){
   const menuBtn = document.getElementById('btn-menu');
   if(menuBtn) menuBtn.addEventListener('click', ()=>{ uiState.sidebarOpen=!uiState.sidebarOpen; renderApp(); });
   document.getElementById('btn-close-sidebar')?.addEventListener('click', ()=>{ uiState.sidebarOpen=false; renderApp(); });
   document.getElementById('sidebar-backdrop')?.addEventListener('click', ()=>{ uiState.sidebarOpen=false; renderApp(); });
+
+  document.getElementById('btn-notificacoes')?.addEventListener('click', ()=> openNotificacoesModal());
 
   document.getElementById('btn-logout')?.addEventListener('click', ()=>{
     if(auth) signOut(auth).catch(()=>{});
