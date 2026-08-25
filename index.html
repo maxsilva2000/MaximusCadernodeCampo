@@ -423,7 +423,7 @@ function cidContext(cid){
     [/^F81/, 'Recomenda-se a adaptação de materiais de leitura, escrita ou cálculo conforme a necessidade específica.'],
     [/^F82/, 'É importante o uso de atividades de coordenação motora adaptadas e tempo ampliado para tarefas que exijam planejamento motor.'],
     [/^F83/, 'As estratégias pedagógicas devem combinar apoios de linguagem, leitura/escrita e organização motora, conforme as áreas afetadas.'],
-    [/^F9[1345]/, 'Recomenda-se acompanhamento próximo do comportamento e das emoções, com combinados claros, previsibilidade de rotina e mediação constante.'],
+    [/^F9[12345]/, 'Recomenda-se acompanhamento próximo do comportamento e das emoções, com combinados claros, previsibilidade de rotina e mediação constante.'],
     [/^G40/, 'É importante manter um ambiente seguro e comunicação constante com a família sobre eventuais episódios.'],
     [/^G8[012]/, 'São essenciais as adaptações relacionadas à mobilidade, à comunicação e ao acesso físico às atividades propostas.'],
     [/^G9[13]/, 'É essencial atenção redobrada ao desenvolvimento cognitivo e motor, com apoio individualizado e comunicação constante com a equipe de saúde e a família.'],
@@ -434,7 +434,7 @@ function cidContext(cid){
     [/^H54/, 'São necessárias adaptações táteis e sonoras nos materiais e nas atividades propostas.'],
     [/^E(70|84)/, 'É importante o acompanhamento próximo das condições de saúde do(a) estudante, com atenção a fadiga, rotina alimentar (quando aplicável) e adequações no ritmo das atividades.'],
     [/^R62/, 'É fundamental o suporte individualizado e a observação contínua do desenvolvimento, com estratégias adaptadas ao ritmo próprio do(a) estudante.'],
-    [/^M40/, 'É importante atenção à postura durante as atividades e adaptação do mobiliário quando necessário.'],
+    [/^M4[01]/, 'É importante atenção à postura durante as atividades e adaptação do mobiliário quando necessário.'],
   ];
   for(const [re, txt] of map){ if(re.test(c)) return txt; }
   return `As estratégias pedagógicas devem ser adaptadas conforme as necessidades individuais do(a) estudante.`;
@@ -448,7 +448,7 @@ function estrategiasAdaptacao(cid){
   if(/^F81/.test(c)) return 'adaptação de materiais de leitura e escrita, uso de recursos multissensoriais, tempo ampliado, avaliação processual e valorização das estratégias próprias de aprendizagem do(a) estudante';
   if(/^F82/.test(c)) return 'atividades de coordenação motora fina e ampla adaptadas, tempo ampliado para tarefas manuais, materiais adaptados (lápis engrossado, tesoura adaptada) e valorização do progresso motor individual';
   if(/^F83/.test(c)) return 'combinação de apoios de linguagem, leitura/escrita e organização motora, com mediação constante e avaliação processual conforme as áreas específicas afetadas';
-  if(/^F9[1345]/.test(c)) return 'combinados claros de convivência, rotina previsível, mediação constante do comportamento e das emoções, reforço positivo e comunicação próxima com a família';
+  if(/^F9[12345]/.test(c)) return 'combinados claros de convivência, rotina previsível, mediação constante do comportamento e das emoções, reforço positivo e comunicação próxima com a família';
   if(/^G40/.test(c)) return 'ambiente seguro, atenção às condições de segurança durante as atividades, comunicação com a família sobre crises e retomada gradual das atividades após eventuais episódios';
   if(/^G8[012]/.test(c)) return 'adaptações relacionadas à mobilidade e ao posicionamento, recursos de acessibilidade física, apoio físico quando necessário e adequação dos materiais para a execução motora das atividades';
   if(/^G9[13]/.test(c)) return 'acompanhamento individualizado do desenvolvimento cognitivo e motor, apoio constante nas atividades e comunicação próxima com a equipe de saúde e a família';
@@ -459,7 +459,7 @@ function estrategiasAdaptacao(cid){
   if(/^Q90/.test(c)) return 'uso de recursos visuais, repetição estruturada, tempo ampliado, valorização das conquistas individuais e atividades que favoreçam a coordenação motora e a autonomia';
   if(/^E(70|84)/.test(c)) return 'atenção à rotina e às condições de saúde do(a) estudante, ajuste do ritmo das atividades conforme necessário e comunicação próxima com a família';
   if(/^R62/.test(c)) return 'suporte individualizado, observação contínua do desenvolvimento e estratégias adaptadas ao ritmo próprio do(a) estudante';
-  if(/^M40/.test(c)) return 'atenção à postura durante as atividades, pausas para alongamento quando necessário e adaptação do mobiliário';
+  if(/^M4[01]/.test(c)) return 'atenção à postura durante as atividades, pausas para alongamento quando necessário e adaptação do mobiliário';
   return 'recursos e estratégias adaptados às necessidades específicas do(a) estudante, com mediação individualizada, linguagem acessível e avaliação processual e formativa';
 }
 
@@ -469,60 +469,157 @@ BNCC_SKILLS['__todas__'] = Object.values(BNCC_SKILLS).flat();
 
 
 const CID_LIST = [
+  // F70-F79 — Deficiência Intelectual
   {codigo:'F70', legenda:'Deficiência Intelectual Leve'},
   {codigo:'F71', legenda:'Deficiência Intelectual Moderada'},
   {codigo:'F72', legenda:'Deficiência Intelectual Grave'},
   {codigo:'F73', legenda:'Deficiência Intelectual Profunda'},
   {codigo:'F78', legenda:'Outras Deficiências Intelectuais'},
   {codigo:'F79', legenda:'Deficiência Intelectual Não Especificada'},
+  // F80 — Transtornos da fala e linguagem
   {codigo:'F80.0', legenda:'Transtorno Específico da Articulação da Fala'},
   {codigo:'F80.1', legenda:'Transtorno Expressivo da Linguagem'},
   {codigo:'F80.2', legenda:'Transtorno Receptivo da Linguagem'},
+  {codigo:'F80.3', legenda:'Afasia Adquirida com Epilepsia (Síndrome de Landau-Kleffner)'},
+  {codigo:'F80.8', legenda:'Outros Transtornos do Desenvolvimento da Fala e da Linguagem'},
   {codigo:'F80.9', legenda:'Transtorno do Desenvolvimento da Fala ou da Linguagem Não Especificado'},
+  // F81 — Transtornos das habilidades escolares
   {codigo:'F81.0', legenda:'Transtorno Específico de Leitura (Dislexia)'},
   {codigo:'F81.1', legenda:'Transtorno Específico da Soletração (Disortografia)'},
   {codigo:'F81.2', legenda:'Transtorno Específico da Habilidade em Aritmética (Discalculia)'},
   {codigo:'F81.3', legenda:'Transtorno Misto das Habilidades Escolares'},
   {codigo:'F81.8', legenda:'Outros Transtornos do Desenvolvimento das Habilidades Escolares (inclui Disgrafia)'},
+  {codigo:'F81.9', legenda:'Transtorno do Desenvolvimento das Habilidades Escolares Não Especificado'},
+  // F82-F83 — Motor e misto
   {codigo:'F82', legenda:'Transtorno Específico do Desenvolvimento Motor (Dispraxia)'},
   {codigo:'F83', legenda:'Transtornos Específicos do Desenvolvimento Misto'},
+  // F84 — Transtornos Globais do Desenvolvimento / TEA
   {codigo:'F84.0', legenda:'Autismo Infantil (Transtorno do Espectro Autista)'},
   {codigo:'F84.1', legenda:'Autismo Atípico'},
   {codigo:'F84.2', legenda:'Síndrome de Rett'},
   {codigo:'F84.3', legenda:'Outro Transtorno Desintegrativo da Infância'},
+  {codigo:'F84.4', legenda:'Transtorno Hipercinético com Retardo Mental e Movimentos Estereotipados'},
   {codigo:'F84.5', legenda:'Síndrome de Asperger'},
   {codigo:'F84.8', legenda:'Outros Transtornos Globais do Desenvolvimento'},
   {codigo:'F84.9', legenda:'Transtorno Global do Desenvolvimento Não Especificado'},
-  {codigo:'F90', legenda:'Transtornos Hipercinéticos (TDAH)'},
+  // F90-F98 — Transtornos emocionais e comportamentais
   {codigo:'F90.0', legenda:'Distúrbio da Atividade e da Atenção (TDAH)'},
+  {codigo:'F90.1', legenda:'Transtorno Hipercinético de Conduta'},
+  {codigo:'F90.8', legenda:'Outros Transtornos Hipercinéticos'},
+  {codigo:'F90.9', legenda:'Transtorno Hipercinético Não Especificado'},
   {codigo:'F91', legenda:'Transtornos de Conduta'},
+  {codigo:'F91.0', legenda:'Transtorno de Conduta Restrito ao Contexto Familiar'},
+  {codigo:'F91.1', legenda:'Transtorno de Conduta não Socializado'},
+  {codigo:'F91.2', legenda:'Transtorno de Conduta Socializado'},
+  {codigo:'F91.3', legenda:'Transtorno Desafiador e de Oposição'},
+  {codigo:'F92', legenda:'Transtornos Mistos de Conduta e das Emoções'},
   {codigo:'F93', legenda:'Transtornos Emocionais com Início Específico na Infância'},
-  {codigo:'F94', legenda:'Transtornos do Funcionamento Social com Início Específico na Infância ou Adolescência'},
+  {codigo:'F93.0', legenda:'Transtorno de Ansiedade de Separação na Infância'},
+  {codigo:'F93.1', legenda:'Transtorno Fóbico-Ansioso da Infância'},
+  {codigo:'F93.2', legenda:'Transtorno de Ansiedade Social na Infância'},
+  {codigo:'F93.3', legenda:'Transtorno de Rivalidade entre Irmãos'},
+  {codigo:'F94', legenda:'Transtornos do Funcionamento Social com Início na Infância'},
+  {codigo:'F94.0', legenda:'Mutismo Seletivo'},
+  {codigo:'F94.1', legenda:'Transtorno de Vinculação da Infância (Tipo Reativo)'},
+  {codigo:'F94.2', legenda:'Transtorno de Vinculação da Infância (Tipo Desinibido)'},
   {codigo:'F95', legenda:'Transtornos de Tique'},
+  {codigo:'F95.0', legenda:'Transtorno de Tique Transitório'},
+  {codigo:'F95.1', legenda:'Transtorno de Tique Motor ou Vocal Crônico'},
+  {codigo:'F95.2', legenda:'Síndrome de Gilles de la Tourette'},
   {codigo:'F98.0', legenda:'Enurese de Origem Não Orgânica'},
+  {codigo:'F98.1', legenda:'Encoprese de Origem Não Orgânica'},
+  {codigo:'F98.5', legenda:'Gagueira (Tartamudez)'},
+  {codigo:'F98.6', legenda:'Linguagem Precipitada (Taquilalia)'},
+  // Transtornos de aprendizagem/comportamento adicionais frequentes
+  {codigo:'F98.8', legenda:'Outros Transtornos Comportamentais e Emocionais Especificados'},
+  // G — Doenças do Sistema Nervoso
   {codigo:'G40', legenda:'Epilepsia'},
+  {codigo:'G40.0', legenda:'Epilepsia e Síndromes Epilépticas Focais'},
+  {codigo:'G40.3', legenda:'Epilepsia e Síndromes Epilépticas Generalizadas Idiopáticas'},
+  {codigo:'G41', legenda:'Estado de Mal Epiléptico'},
+  {codigo:'G43', legenda:'Enxaqueca'},
   {codigo:'G80', legenda:'Paralisia Cerebral'},
   {codigo:'G80.0', legenda:'Paralisia Cerebral Quadriplégica Espástica'},
   {codigo:'G80.1', legenda:'Paralisia Cerebral Diplégica Espástica'},
   {codigo:'G80.2', legenda:'Paralisia Cerebral Hemiplégica Espástica'},
+  {codigo:'G80.3', legenda:'Paralisia Cerebral Discinética'},
+  {codigo:'G80.4', legenda:'Paralisia Cerebral Atáxica'},
   {codigo:'G81', legenda:'Hemiplegia'},
   {codigo:'G82', legenda:'Paraplegia e Tetraplegia'},
+  {codigo:'G82.0', legenda:'Paraplegia Flácida'},
+  {codigo:'G82.4', legenda:'Tetraplegia Espástica'},
   {codigo:'G91', legenda:'Hidrocefalia'},
   {codigo:'G93', legenda:'Outros Transtornos Encefálicos'},
-  {codigo:'H90', legenda:'Perda de Audição Condutiva e Neurossensorial (Surdez)'},
+  {codigo:'G93.1', legenda:'Lesão Encefálica Anóxica não Classificada em Outra Parte'},
+  {codigo:'G93.4', legenda:'Encefalopatia Não Especificada'},
+  // H — Audição e Visão
+  {codigo:'H90', legenda:'Perda de Audição Condutiva e Neurossensorial'},
+  {codigo:'H90.3', legenda:'Perda de Audição Neurossensorial Bilateral (Surdez)'},
+  {codigo:'H90.6', legenda:'Perda de Audição Mista, Não Especificada'},
   {codigo:'H91', legenda:'Outras Perdas de Audição'},
+  {codigo:'H91.9', legenda:'Perda Não Especificada de Audição'},
   {codigo:'H54', legenda:'Cegueira e Baixa Visão'},
   {codigo:'H54.0', legenda:'Cegueira Bilateral'},
+  {codigo:'H54.1', legenda:'Cegueira em um Olho e Baixa Visão no Outro'},
   {codigo:'H54.2', legenda:'Baixa Visão Bilateral'},
+  {codigo:'H54.4', legenda:'Cegueira Monocular'},
+  {codigo:'H53', legenda:'Distúrbios Visuais Subjetivos'},
+  // Q — Malformações e Anomalias Cromossômicas
   {codigo:'Q90', legenda:'Síndrome de Down'},
+  {codigo:'Q90.0', legenda:'Trissomia do 21, Não Disjunção Meiótica'},
   {codigo:'Q05', legenda:'Espinha Bífida'},
-  {codigo:'Q87', legenda:'Outras Síndromes com Malformações Congênitas (ex: Síndrome de Williams, Angelman)'},
+  {codigo:'Q05.9', legenda:'Espinha Bífida Não Especificada'},
+  {codigo:'Q87', legenda:'Outras Síndromes com Malformações Congênitas (ex: Williams, Angelman, Prader-Willi)'},
   {codigo:'Q99', legenda:'Outras Anomalias dos Cromossomos, Não Classificadas em Outra Parte'},
+  {codigo:'Q96', legenda:'Síndrome de Turner'},
+  {codigo:'Q98', legenda:'Síndrome de Klinefelter'},
   {codigo:'Q77', legenda:'Osteocondrodisplasia com Anomalias do Crescimento (ex: Acondroplasia)'},
-  {codigo:'E70', legenda:'Distúrbios do Metabolismo dos Aminoácidos Aromáticos (ex: Fenilcetonúria)'},
+  {codigo:'Q00', legenda:'Anencefalia e Malformações Similares'},
+  {codigo:'Q01', legenda:'Encefalocele'},
+  {codigo:'Q02', legenda:'Microcefalia'},
+  {codigo:'Q03', legenda:'Hidrocefalia Congênita'},
+  {codigo:'Q35', legenda:'Fenda Palatina'},
+  {codigo:'Q36', legenda:'Fenda Labial (Lábio Leporino)'},
+  {codigo:'Q37', legenda:'Fenda Palatina com Fenda Labial'},
+  {codigo:'Q65', legenda:'Deformidades Congênitas do Quadril'},
+  {codigo:'Q66', legenda:'Deformidades Congênitas dos Pés'},
+  {codigo:'Q71', legenda:'Defeitos, por Redução, do Membro Superior'},
+  {codigo:'Q72', legenda:'Defeitos, por Redução, do Membro Inferior'},
+  {codigo:'Q79.6', legenda:'Síndrome de Ehlers-Danlos'},
+  // E — Doenças Metabólicas e Endócrinas
+  {codigo:'E70', legenda:'Distúrbios do Metabolismo dos Aminoácidos Aromáticos (Fenilcetonúria)'},
+  {codigo:'E75', legenda:'Distúrbios do Metabolismo dos Esfingolipídios'},
   {codigo:'E84', legenda:'Fibrose Cística'},
+  {codigo:'E84.9', legenda:'Fibrose Cística Não Especificada'},
+  {codigo:'E10', legenda:'Diabetes Mellitus Tipo 1 (Insulinodependente)'},
+  {codigo:'E03', legenda:'Hipotireoidismo'},
+  {codigo:'E34.3', legenda:'Baixa Estatura, Não Classificada em Outra Parte'},
+  {codigo:'E66', legenda:'Obesidade'},
+  // R — Sintomas e sinais / atrasos gerais
   {codigo:'R62', legenda:'Atraso do Desenvolvimento Neuropsicomotor'},
+  {codigo:'R62.0', legenda:'Atraso dos Marcos do Desenvolvimento'},
+  {codigo:'R41.8', legenda:'Outros Sintomas e Sinais Relativos às Funções Cognitivas e à Consciência'},
+  {codigo:'R47', legenda:'Distúrbios da Fala Não Classificados em Outra Parte'},
+  {codigo:'R47.0', legenda:'Disfasia e Afasia'},
+  {codigo:'R48', legenda:'Dislexia e Outras Disfunções Simbólicas Não Classificadas em Outra Parte'},
+  // M — Sistema Osteomuscular
   {codigo:'M40', legenda:'Cifose e Lordose (Desvios de Postura da Coluna)'},
+  {codigo:'M41', legenda:'Escoliose'},
+  {codigo:'M41.9', legenda:'Escoliose Não Especificada'},
+  // Doenças neuromusculares e outras condições físicas comuns
+  {codigo:'G12.0', legenda:'Amiotrofia Espinhal Infantil Tipo I (Síndrome de Werdnig-Hoffmann)'},
+  {codigo:'G12.1', legenda:'Outras Atrofias Musculares Espinhais Hereditárias'},
+  {codigo:'G71.0', legenda:'Distrofia Muscular (ex: Duchenne)'},
+  {codigo:'G35', legenda:'Esclerose Múltipla'},
+  {codigo:'Q79.0', legenda:'Hérnia Diafragmática Congênita'},
+  // Outras condições de saúde e distúrbios do neurodesenvolvimento frequentes em laudos
+  {codigo:'P07', legenda:'Transtornos Relacionados com Curta Duração da Gestação e Baixo Peso ao Nascer (Prematuridade)'},
+  {codigo:'P91.6', legenda:'Encefalopatia Hipóxico-Isquêmica'},
+  {codigo:'D82.3', legenda:'Síndrome de Ataxia-Telangiectasia'},
+  {codigo:'K90', legenda:'Doença Celíaca e Outras Má-absorções Intestinais'},
+  {codigo:'T78.4', legenda:'Alergia Não Especificada (Alimentar ou Outra)'},
+  {codigo:'N39.4', legenda:'Outras Incontinências Urinárias Especificadas'},
+  {codigo:'Z55', legenda:'Problemas Relacionados com a Educação e com a Alfabetização'},
 ];
 
 const UNIDADES_TEMATICAS = {
@@ -676,7 +773,7 @@ async function chamarGeminiIA(promptTexto){
   return text.trim();
 }
 
-function getIAProvider(){ return (appData && appData.iaConfig && appData.iaConfig.provider) || 'gemini'; }
+function getIAProvider(){ return (appData && appData.iaConfig && appData.iaConfig.provider) || 'claude'; }
 function setIAProvider(p){ if(!appData.iaConfig) appData.iaConfig={provider:'gemini',geminiKey:'',groqKey:'',anthropicKey:''}; appData.iaConfig.provider = p; }
 
 function getGroqKey(){ return (appData && appData.iaConfig && appData.iaConfig.groqKey) || ''; }
@@ -704,15 +801,17 @@ async function chamarGroqIA(promptTexto, model){
   return ((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '').trim();
 }
 
-const PROVIDER_ORDER = ['gemini', 'groq-llama', 'groq-kimi'];
-const PROVIDER_LABEL = { gemini:'Gemini', 'groq-llama':'Groq (Llama)', 'groq-kimi':'Groq (Kimi K2)' };
+const PROVIDER_ORDER = ['claude', 'gemini', 'groq-llama', 'groq-kimi'];
+const PROVIDER_LABEL = { claude:'Claude (Anthropic)', gemini:'Gemini', 'groq-llama':'Groq (Llama)', 'groq-kimi':'Groq (Kimi K2)' };
 const GROQ_MODELS = { 'groq-llama':'llama-3.3-70b-versatile', 'groq-kimi':'moonshotai/kimi-k2-instruct-0905' };
 
 function temChaveProvider(provider){
+  if(provider==='claude') return !!getAnthropicKey();
   if(provider==='gemini') return !!getGeminiKey();
   return !!getGroqKey();
 }
 async function tentarProvider(provider, promptTexto){
+  if(provider==='claude') return chamarClaudeIA(promptTexto);
   if(provider==='gemini') return chamarGeminiIA(promptTexto);
   return chamarGroqIA(promptTexto, GROQ_MODELS[provider]);
 }
@@ -2749,6 +2848,7 @@ function renderUserManagement(){
   const usersFiltrados = filtro==='todas' ? appData.users : appData.users.filter(u=>u.escola===filtro);
   const pendentes = appData.users.filter(u=>u.status && u.status!=='ativo');
   const provider = getIAProvider();
+  const claudeKey = getAnthropicKey();
   const geminiKey = getGeminiKey();
   const groqKey = getGroqKey();
   return `
@@ -2763,10 +2863,11 @@ function renderUserManagement(){
         <div class="tab-badge">Configurar IA</div>
         <div class="serif" style="font-size:18px;font-weight:700;color:#B8860B;margin:8px 0 6px;">🤖 Geração de relatórios e pareceres por IA</div>
         <div style="font-size:12px; color:var(--dim); margin-bottom:6px;">A chave fica salva só neste navegador/aparelho — nunca é enviada para o Firebase nem aparece no código do site.</div>
-        <div class="ai-disclaimer" style="margin-bottom:14px;">🔄 <span>Preencha as duas chaves (ambas gratuitas). O app tenta primeiro o "provedor preferido"; se ele falhar (fora do ar, sobrecarregado), tenta automaticamente o outro.</span></div>
+        <div class="ai-disclaimer" style="margin-bottom:14px;">🔄 <span>Preencha as chaves que tiver (todas opcionais). O app tenta primeiro o "provedor preferido"; se ele falhar (fora do ar, sobrecarregado), tenta automaticamente os outros, em cascata.</span></div>
 
         <label class="field" style="margin-bottom:12px;"><span>Provedor preferido (tentado primeiro)</span>
           <select id="ia-provider-select">
+            <option value="claude" ${provider==='claude'?'selected':''}>Claude (Anthropic) — pago, alta qualidade</option>
             <option value="gemini" ${provider==='gemini'?'selected':''}>Gemini (Google) — gratuito, dados podem treinar modelos do Google</option>
             <option value="groq-llama" ${provider==='groq-llama'?'selected':''}>Groq — Llama 3.3 70B — gratuito, sem cartão de crédito</option>
             <option value="groq-kimi" ${provider==='groq-kimi'?'selected':''}>Groq — Kimi K2 — gratuito, sem cartão de crédito</option>
@@ -2775,6 +2876,12 @@ function renderUserManagement(){
         <div style="font-size:11px; color:var(--dim); margin-top:-6px; margin-bottom:12px;">Llama e Kimi K2 usam a mesma chave do Groq (só uma chave é necessária pros dois).</div>
 
         <div class="grid2">
+          <div>
+            <label class="field"><span>Chave de API — Claude (Anthropic)</span>
+              <div class="pw-wrap"><input type="password" id="ia-claude-key" value="${esc(claudeKey)}" placeholder="sk-ant-..."><button type="button" class="pw-eye" data-toggle-pw="ia-claude-key">👁</button></div>
+            </label>
+            <div style="font-size:11px; color:var(--dim); margin-top:4px;">Obtenha em console.anthropic.com (pago, por uso)</div>
+          </div>
           <div>
             <label class="field"><span>Chave de API — Gemini (Google)</span>
               <div class="pw-wrap"><input type="password" id="ia-gemini-key" value="${esc(geminiKey)}" placeholder="AIza..."><button type="button" class="pw-eye" data-toggle-pw="ia-gemini-key">👁</button></div>
@@ -3014,6 +3121,7 @@ function wireAppListeners(selected, canEdit, isDev){
   wirePwToggles();
   document.getElementById('btn-save-ia-config')?.addEventListener('click', async ()=>{
     setIAProvider(document.getElementById('ia-provider-select').value);
+    setAnthropicKey(document.getElementById('ia-claude-key').value.trim());
     setGeminiKey(document.getElementById('ia-gemini-key').value.trim());
     setGroqKey(document.getElementById('ia-groq-key').value.trim());
     await persistImmediate();
