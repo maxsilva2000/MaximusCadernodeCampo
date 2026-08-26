@@ -225,7 +225,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
 /* ============ generic helpers ============ */
@@ -1675,6 +1675,28 @@ function restaurarSessaoViaAuth(){
 }
 
 let mainSyncStarted = false;
+let usersCache = [];
+let migracaoUsuariosTentada = false;
+async function migrarUsuariosLegadoSeNecessario(legacyUsers){
+  if(migracaoUsuariosTentada) return;
+  if(!Array.isArray(legacyUsers) || legacyUsers.length===0) return;
+  migracaoUsuariosTentada = true;
+  try{
+    const marcador = doc(db, 'meta', 'usersMigrated');
+    const snap = await getDoc(marcador);
+    if(snap.exists() && snap.data().done){ return; } // já migrado antes — nunca repetir
+    for(const u of legacyUsers){
+      if(!u || !u.id) continue;
+      const uCompleto = { cancelamentoSolicitado:false, cancelamentoData:null, ...u };
+      await setDoc(doc(db, 'users', u.id), uCompleto);
+    }
+    await setDoc(marcador, { done:true, when:Date.now(), quantidade:legacyUsers.length });
+  }catch(e){
+    console.error('Migração de usuários falhou:', e);
+    migracaoUsuariosTentada = false; // permite tentar de novo na próxima carga
+  }
+}
+
 function garantirSyncPrincipal(){
   return new Promise((resolve)=>{
     if(mainSyncStarted){ resolve(); return; }
@@ -1688,9 +1710,13 @@ function garantirSyncPrincipal(){
       const ref = doc(db, KV_COLLECTION, STORAGE_KEY);
       let resolved = false;
       onSnapshot(ref, (snap) => {
-        appData = (snap.exists() && snap.data().value) ? JSON.parse(snap.data().value) : (appData || emptyData());
+        const parsed = (snap.exists() && snap.data().value) ? JSON.parse(snap.data().value) : (appData || emptyData());
+        const legacyUsers = parsed.users;
+        appData = parsed;
         migrateAppData();
+        appData.users = usersCache;
         saveStatus = 'ok';
+        migrarUsuariosLegadoSeNecessario(legacyUsers);
         if(!resolved){ resolved = true; resolve(); }
         else { withFocusPreserved(()=> render()); }
       }, (err)=>{
@@ -1698,6 +1724,34 @@ function garantirSyncPrincipal(){
         mainSyncStarted = false;
         if(!resolved){ resolved = true; resolve(); }
         setTimeout(()=>{ garantirSyncPrincipal(); }, 1500);
+      });
+    };
+    start();
+  });
+}
+
+let usersSyncStarted = false;
+function garantirSyncUsuarios(){
+  return new Promise((resolve)=>{
+    if(usersSyncStarted){ resolve(); return; }
+    if(!db){ resolve(); return; }
+    usersSyncStarted = true;
+
+    const start = async ()=>{
+      if(auth && auth.currentUser){
+        try{ await auth.currentUser.getIdToken(true); }catch(e){}
+      }
+      let resolved = false;
+      onSnapshot(collection(db, 'users'), (snap) => {
+        usersCache = snap.docs.map(d=>d.data());
+        if(appData) appData.users = usersCache;
+        if(!resolved){ resolved = true; resolve(); }
+        else if(appData){ withFocusPreserved(()=> render()); }
+      }, (err)=>{
+        console.error('Firestore sync error (users):', err);
+        usersSyncStarted = false;
+        if(!resolved){ resolved = true; resolve(); }
+        setTimeout(()=>{ garantirSyncUsuarios(); }, 1500);
       });
     };
     start();
@@ -1740,7 +1794,7 @@ async function initApp(){
   });
 
   if(fbUser){
-    await garantirSyncPrincipal();
+    await Promise.all([garantirSyncPrincipal(), garantirSyncUsuarios()]);
     const user = appData.users.find(u=>u.id===fbUser.uid);
     const valido = user && (!user.status || user.status==='ativo') && !(user.pagamentoExpira && Date.now() > user.pagamentoExpira);
     if(valido){ session.userId = user.id; }
@@ -1757,7 +1811,7 @@ function persist(){
   saveStatus='saving';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
-    try{ await store.set(STORAGE_KEY, JSON.stringify(appData)); saveStatus='ok'; }
+    try{ const {users, ...resto} = appData; await store.set(STORAGE_KEY, JSON.stringify(resto)); saveStatus='ok'; }
     catch(e){ saveStatus='offline'; }
     renderStatusLine();
   }, 200);
@@ -1765,7 +1819,7 @@ function persist(){
 async function persistImmediate(){
   clearTimeout(saveTimer);
   saveStatus='saving';
-  try{ await store.set(STORAGE_KEY, JSON.stringify(appData)); saveStatus='ok'; }
+  try{ const {users, ...resto} = appData; await store.set(STORAGE_KEY, JSON.stringify(resto)); saveStatus='ok'; }
   catch(e){ saveStatus='offline'; }
   renderStatusLine();
 }
@@ -1869,7 +1923,7 @@ async function doLogin(){
     authTemp={loginRole:selectedRole, error:'E-mail ou senha incorretos.'};
     render(); return;
   }
-  await garantirSyncPrincipal();
+  await Promise.all([garantirSyncPrincipal(), garantirSyncUsuarios()]);
   const user = appData.users.find(u=>u.id===cred.user.uid);
   if(!user){
     authTemp={loginRole:selectedRole, error:'Login válido, mas não encontramos seu cadastro no sistema. Procure o Desenvolvedor.'};
@@ -2000,15 +2054,20 @@ function renderSignupDados(){
         if(e.code==='auth/weak-password') return fail('Senha muito fraca. Use pelo menos 8 caracteres.');
         return fail('Não foi possível criar a conta: ' + (e.message||'erro desconhecido') + '.');
       }
-      await garantirSyncPrincipal();
+      await Promise.all([garantirSyncPrincipal(), garantirSyncUsuarios()]);
       const user = {
         id: cred.user.uid, nome, email, telefone:telDigits, cpf:cpfDigits, escola:escolaVal,
         role:targetRole, status: targetRole==='desenvolvedor'?'ativo':'pendente',
         pagamentoConfirmado: targetRole==='desenvolvedor', pagamentoData:null, pagamentoExpira:null,
+        cancelamentoSolicitado:false, cancelamentoData:null,
         createdAt:Date.now(),
       };
-      appData.users.push(user);
-      await persistImmediate();
+      try{
+        await setDoc(doc(db, 'users', user.id), user);
+      }catch(e){
+        return fail('Não foi possível salvar seu cadastro: ' + (e.message||'erro desconhecido') + '. Tente novamente.');
+      }
+      appData.users = [...appData.users.filter(u=>u.id!==user.id), user];
       if(user.status === 'ativo'){
         session.userId = user.id;
         authTemp={}; authScreen='login'; render();
@@ -3116,14 +3175,14 @@ function openNotificacoesModal(){
     if(!confirm('Isso vai solicitar o cancelamento da renovação da sua assinatura. Seu acesso continua válido até o fim do período já pago. Deseja continuar?')) return;
     user.cancelamentoSolicitado = true;
     user.cancelamentoData = Date.now();
-    await persistImmediate();
+    try{ await setDoc(doc(db, 'users', user.id), user); }catch(e){ alert('Não foi possível salvar: ' + (e.message||'erro desconhecido')); }
     close(); openNotificacoesModal();
   });
 
   document.getElementById('btn-desfazer-cancelamento')?.addEventListener('click', async ()=>{
     user.cancelamentoSolicitado = false;
     user.cancelamentoData = null;
-    await persistImmediate();
+    try{ await setDoc(doc(db, 'users', user.id), user); }catch(e){ alert('Não foi possível salvar: ' + (e.message||'erro desconhecido')); }
     close(); openNotificacoesModal();
   });
 
@@ -3180,17 +3239,21 @@ function wireAppListeners(selected, canEdit, isDev){
   });
 
   /* user management wiring */
+  async function persistirUsuario(u){
+    try{ await setDoc(doc(db, 'users', u.id), u); }
+    catch(e){ alert('Não foi possível salvar: ' + (e.message||'erro desconhecido')); }
+  }
   document.querySelectorAll('[data-role-select]').forEach(sel=>{
-    sel.addEventListener('change', ()=>{
+    sel.addEventListener('change', async ()=>{
       const u = appData.users.find(x=>x.id===sel.dataset.roleSelect);
       if(u.id===session.userId && sel.value!=='desenvolvedor'){
         if(!confirm('Você está removendo seu próprio acesso de Desenvolvedor. Deseja continuar?')){ renderApp(); return; }
       }
-      u.role = sel.value; persist(); renderApp();
+      u.role = sel.value; await persistirUsuario(u); renderApp();
     });
   });
   document.querySelectorAll('[data-approve-user]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', async ()=>{
       const u = appData.users.find(x=>x.id===btn.dataset.approveUser);
       const dias = diasRestantes(u.pagamentoExpira);
       const semPagamentoValido = dias===null || dias<0;
@@ -3200,27 +3263,27 @@ function wireAppListeners(selected, canEdit, isDev){
         if(!confirm(`Aprovar o acesso de ${u.nome} como ${ROLE_LABEL[u.role]}${u.escola?` na escola ${u.escola}`:''}?`)) return;
       }
       u.status = 'ativo';
-      persist(); renderApp();
+      await persistirUsuario(u); renderApp();
     });
   });
   document.querySelectorAll('[data-pay-user]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', async ()=>{
       const u = appData.users.find(x=>x.id===btn.dataset.payUser);
       const dias = diasRestantes(u.pagamentoExpira);
       const base = (dias!==null && dias>0) ? u.pagamentoExpira : Date.now();
       u.pagamentoData = Date.now();
       u.pagamentoExpira = base + DIAS_ASSINATURA*24*60*60*1000;
       u.pagamentoConfirmado = true;
-      persist(); renderApp();
+      await persistirUsuario(u); renderApp();
     });
   });
   document.querySelectorAll('[data-revoke-user]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', async ()=>{
       const u = appData.users.find(x=>x.id===btn.dataset.revokeUser);
       if(!confirm(`Revogar o pagamento de ${u.nome}? Isso vai bloquear o acesso dela(e) até um novo pagamento ser registrado.`)) return;
       u.pagamentoConfirmado = false;
       u.pagamentoExpira = null;
-      persist(); renderApp();
+      await persistirUsuario(u); renderApp();
     });
   });
   document.querySelectorAll('[data-reset-pw]').forEach(btn=>{
@@ -3237,11 +3300,13 @@ function wireAppListeners(selected, canEdit, isDev){
     });
   });
   document.querySelectorAll('[data-delete-user]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', async ()=>{
       const u = appData.users.find(x=>x.id===btn.dataset.deleteUser);
       if(!confirm(`Excluir a conta de ${u.nome}? Esta ação não pode ser desfeita.`)) return;
+      try{ await deleteDoc(doc(db, 'users', u.id)); }
+      catch(e){ alert('Não foi possível excluir: ' + (e.message||'erro desconhecido')); return; }
       appData.users = appData.users.filter(x=>x.id!==u.id);
-      persist(); renderApp();
+      renderApp();
     });
   });
   document.getElementById('user-escola-filter')?.addEventListener('change', (e)=>{
