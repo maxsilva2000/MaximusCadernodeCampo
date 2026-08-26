@@ -727,20 +727,31 @@ function setAnthropicKey(k){ if(!appData.iaConfig) appData.iaConfig={provider:'g
 async function chamarClaudeIA(promptTexto){
   const key = getAnthropicKey();
   if(!key) throw new Error('NO_KEY');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1600,
-      messages: [{ role: 'user', content: promptTexto }],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=> controller.abort(), 20000);
+  let res;
+  try{
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 1600,
+        messages: [{ role: 'user', content: promptTexto }],
+      }),
+    });
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('API_ERROR:503:timeout');
+    throw e;
+  }finally{
+    clearTimeout(timeoutId);
+  }
   if(!res.ok){
     const errText = await res.text().catch(()=> '');
     throw new Error('API_ERROR:' + res.status + ':' + errText.slice(0,300));
@@ -756,14 +767,25 @@ async function chamarGeminiIA(promptTexto){
   const key = getGeminiKey();
   if(!key) throw new Error('NO_KEY');
   const model = 'gemini-flash-latest';
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-goog-api-key': key,
-    },
-    body: JSON.stringify({ contents: [{ parts: [{ text: promptTexto }] }] }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=> controller.abort(), 20000);
+  let res;
+  try{
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': key,
+      },
+      body: JSON.stringify({ contents: [{ parts: [{ text: promptTexto }] }] }),
+    });
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('API_ERROR:503:timeout');
+    throw e;
+  }finally{
+    clearTimeout(timeoutId);
+  }
   if(!res.ok){
     const errText = await res.text().catch(()=> '');
     throw new Error('API_ERROR:' + res.status + ':' + errText.slice(0,300));
@@ -782,17 +804,28 @@ function setGroqKey(k){ if(!appData.iaConfig) appData.iaConfig={provider:'gemini
 async function chamarGroqIA(promptTexto, model){
   const key = getGroqKey();
   if(!key) throw new Error('NO_KEY');
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + key,
-    },
-    body: JSON.stringify({
-      model: model || 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: promptTexto }],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=> controller.abort(), 20000);
+  let res;
+  try{
+    res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+      },
+      body: JSON.stringify({
+        model: model || 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: promptTexto }],
+      }),
+    });
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('API_ERROR:503:timeout');
+    throw e;
+  }finally{
+    clearTimeout(timeoutId);
+  }
   if(!res.ok){
     const errText = await res.text().catch(()=> '');
     throw new Error('API_ERROR:' + res.status + ':' + errText.slice(0,300));
@@ -815,22 +848,23 @@ async function tentarProvider(provider, promptTexto){
   if(provider==='gemini') return chamarGeminiIA(promptTexto);
   return chamarGroqIA(promptTexto, GROQ_MODELS[provider]);
 }
-async function chamarComRetry(provider, promptTexto, tentativas){
+async function chamarComRetry(provider, promptTexto, tentativas, onTentativa){
   for(let i=1; i<=tentativas; i++){
+    if(onTentativa) onTentativa(provider, i);
     try{
       return await tentarProvider(provider, promptTexto);
     }catch(e){
       const msg = e.message || '';
       const transitorio = msg.includes('API_ERROR:503') || msg.includes('API_ERROR:429');
       if(transitorio && i<tentativas){
-        await new Promise(r=>setTimeout(r, 1200*i));
+        await new Promise(r=>setTimeout(r, 600*i));
         continue;
       }
       throw e;
     }
   }
 }
-async function chamarIA(promptTexto){
+async function chamarIA(promptTexto, onTentativa){
   const preferido = getIAProvider();
   const ordem = [preferido, ...PROVIDER_ORDER.filter(p=>p!==preferido)];
   const disponiveis = ordem.filter(temChaveProvider);
@@ -838,7 +872,7 @@ async function chamarIA(promptTexto){
   let ultimoErro = null;
   for(const provider of disponiveis){
     try{
-      return await chamarComRetry(provider, promptTexto, 2);
+      return await chamarComRetry(provider, promptTexto, 2, onTentativa);
     }catch(e){
       ultimoErro = e;
     }
@@ -3423,7 +3457,7 @@ function wireAppListeners(selected, canEdit, isDev){
       const prompt = montarPromptParecerPEI(selected, potenc, f.dificuldades, periodo.label, cidLegendas);
       btn.disabled = true; btn.textContent = 'Gerando…';
       try{
-        const texto = await chamarIA(prompt);
+        const texto = await chamarIA(prompt, (provider, tentativa)=>{ btn.textContent = `Gerando… (${PROVIDER_LABEL[provider]||provider}${tentativa>1?', tentativa '+tentativa:''})`; });
         document.getElementById('pei-parecer-text').value = texto;
       }catch(e){
         if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
@@ -3456,7 +3490,7 @@ function wireAppListeners(selected, canEdit, isDev){
         const prompt = montarPromptComponentePEI(componente, cidLegendas, potenc, f.dificuldades, habilidadesTurmaTexto);
         btn.disabled = true; btn.textContent = 'Gerando…';
         try{
-          const texto = await chamarIA(prompt);
+          const texto = await chamarIA(prompt, (provider, tentativa)=>{ btn.textContent = `Gerando… (${PROVIDER_LABEL[provider]||provider}${tentativa>1?', tentativa '+tentativa:''})`; });
           const parsed = parseRespostaComponentePEI(texto);
           const objConhEl = document.getElementById('objconh-'+uid);
           const objEl = document.getElementById('objetivos-'+uid);
@@ -3489,7 +3523,7 @@ function wireAppListeners(selected, canEdit, isDev){
         const prompt = montarPromptDificuldadesPEI(cidLegendas);
         btn.disabled = true; btn.textContent = 'Gerando…';
         try{
-          const texto = await chamarIA(prompt);
+          const texto = await chamarIA(prompt, (provider, tentativa)=>{ btn.textContent = `Gerando… (${PROVIDER_LABEL[provider]||provider}${tentativa>1?', tentativa '+tentativa:''})`; });
           const el = document.getElementById(targetId);
           if(el){ el.value = texto; el.dispatchEvent(new Event('input')); }
         }catch(e){
@@ -3524,7 +3558,7 @@ function wireAppListeners(selected, canEdit, isDev){
         const prompt = montarPromptSugestaoAdaptada(turmaTextos, cidLegendas, componente);
         btn.disabled = true; btn.textContent = 'Buscando…';
         try{
-          const frase = await chamarIA(prompt);
+          const frase = await chamarIA(prompt, (provider, tentativa)=>{ btn.textContent = `Buscando… (${PROVIDER_LABEL[provider]||provider}${tentativa>1?', tentativa '+tentativa:''})`; });
           const adaptWrap = document.getElementById('adaptada-'+uid);
           const searchInput = adaptWrap ? adaptWrap.querySelector('.bncc-search') : null;
           if(searchInput){
@@ -3619,7 +3653,7 @@ function wireAppListeners(selected, canEdit, isDev){
     const prompt = montarPromptRelatorioPedagogico(selected, entries, uiState.bim, uiState.bimYear, start, end);
     btn.disabled = true; btn.textContent = 'Gerando…';
     try{
-      const texto = await chamarIA(prompt);
+      const texto = await chamarIA(prompt, (provider, tentativa)=>{ btn.textContent = `Gerando… (${PROVIDER_LABEL[provider]||provider}${tentativa>1?', tentativa '+tentativa:''})`; });
       const ta = document.getElementById('pedagogico-text');
       ta.value = texto;
       ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
