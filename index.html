@@ -1685,12 +1685,15 @@ async function migrarUsuariosLegadoSeNecessario(legacyUsers){
     const marcador = doc(db, 'meta', 'usersMigrated');
     const snap = await getDoc(marcador);
     if(snap.exists() && snap.data().done){ return; } // já migrado antes — nunca repetir
+    const migrados = [];
     for(const u of legacyUsers){
       if(!u || !u.id) continue;
       const uCompleto = { cancelamentoSolicitado:false, cancelamentoData:null, ...u };
       await setDoc(doc(db, 'users', u.id), uCompleto);
+      migrados.push(uCompleto);
     }
     await setDoc(marcador, { done:true, when:Date.now(), quantidade:legacyUsers.length });
+    usersCache = migrados; // atualiza o cache imediatamente, sem esperar o próximo snapshot
   }catch(e){
     console.error('Migração de usuários falhou:', e);
     migracaoUsuariosTentada = false; // permite tentar de novo na próxima carga
@@ -1709,16 +1712,21 @@ function garantirSyncPrincipal(){
       }
       const ref = doc(db, KV_COLLECTION, STORAGE_KEY);
       let resolved = false;
-      onSnapshot(ref, (snap) => {
+      onSnapshot(ref, async (snap) => {
         const parsed = (snap.exists() && snap.data().value) ? JSON.parse(snap.data().value) : (appData || emptyData());
         const legacyUsers = parsed.users;
         appData = parsed;
         migrateAppData();
         appData.users = usersCache;
         saveStatus = 'ok';
-        migrarUsuariosLegadoSeNecessario(legacyUsers);
-        if(!resolved){ resolved = true; resolve(); }
-        else { withFocusPreserved(()=> render()); }
+        if(!resolved){
+          await migrarUsuariosLegadoSeNecessario(legacyUsers);
+          appData.users = usersCache;
+          resolved = true; resolve();
+        } else {
+          migrarUsuariosLegadoSeNecessario(legacyUsers);
+          withFocusPreserved(()=> render());
+        }
       }, (err)=>{
         console.error('Firestore sync error:', err);
         mainSyncStarted = false;
