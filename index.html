@@ -880,11 +880,14 @@ async function chamarIA(promptTexto, onTentativa){
   throw new Error('TODOS_FALHARAM:' + (ultimoErro ? ultimoErro.message : ''));
 }
 
-function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStart, periodoEnd){
+function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStart, periodoEnd, relatoriosAnteriores){
   const sorted = entries.slice().sort((a,b)=> a.data<b.data?-1:1);
   const registros = sorted.map(e=>{
     let linha = `${fmtDateBR(e.data)} (${weekdayBR(e.data)}): `;
-    if(!e.presente) return linha + 'Falta.';
+    if(!e.presente){
+      const rotuloFalta = e.tipoFalta==='atestado' ? 'Falta com atestado médico' : (e.tipoFalta==='justificada' ? 'Falta justificada' : 'Falta não justificada');
+      return linha + rotuloFalta + (e.motivoFalta ? ` (${e.motivoFalta})` : '') + '.';
+    }
     linha += `Presente, chegada ${e.chegada||'-'}, saída ${e.saida||'-'}.`;
     if(e.atividades && e.atividades.length){
       linha += ' Atividades: ' + e.atividades.map(a=>`${a.descricao||'atividade'} (${STATUS[a.status]?.label})`).join('; ') + '.';
@@ -892,6 +895,12 @@ function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStar
     if(e.desenvolvimento && e.desenvolvimento.trim()) linha += ' Observações: ' + e.desenvolvimento.trim();
     return linha;
   }).join('\n');
+
+  const temAnteriores = relatoriosAnteriores && relatoriosAnteriores.length>0;
+  const blocoAnteriores = temAnteriores ? `
+RELATÓRIOS ANTERIORES DESTE ALUNO (use-os como base de comparação — não repita o texto deles, apenas use-os para identificar e narrar a evolução):
+${relatoriosAnteriores.slice().sort((a,b)=> a.data<b.data?-1:1).map(r=>`--- ${r.titulo} (${fmtDateBR(r.data)}) ---\n${r.texto}`).join('\n\n')}
+` : '';
 
   return `Você é um profissional de educação especial brasileiro escrevendo um relatório pedagógico bimestral oficial, no mesmo estilo de relatórios reais de acompanhamento especializado: narrativo, específico, baseado nos registros reais, evitando frases genéricas ou clichês.
 
@@ -904,13 +913,14 @@ Período: ${bim}º Bimestre de ${ano} (${fmtDateBR(periodoStart)} a ${fmtDateBR(
 
 REGISTROS DO CADERNO DE CAMPO NO PERÍODO (use estes registros reais como base — não invente informações que não estejam aqui):
 ${registros || '(nenhum registro encontrado neste período)'}
-
+${blocoAnteriores}
 INSTRUÇÕES:
 - Escreva um relatório corrido (não uma lista de tópicos), com parágrafos que contam a evolução do período.
 - NUNCA escreva frases como "trata-se de aluno com deficiência X" — o diagnóstico já está identificado em outro lugar do documento.
-- Ao falar de frequência, use termos qualitativos (ex: "frequência regular", "frequência irregular") em vez de listar datas específicas de falta.
+- Ao falar de frequência, use termos qualitativos (ex: "frequência regular", "frequência irregular") em vez de listar datas específicas de falta. Faltas com atestado médico ou justificadas (ex: tratamento em CAPS) não devem ser tratadas como um problema de assiduidade — mencione-as apenas se relevante ao contexto do aluno, sem tom negativo.
 - Traga observações específicas e concretas dos registros reais, não generalidades.
 - Se houver evolução perceptível ao longo do período (comportamento, engajamento, autonomia, vínculo), narre essa evolução.
+${temAnteriores ? '- Como há relatórios de períodos anteriores fornecidos acima, escreva o relatório com foco em EVOLUÇÃO: compare explicitamente o que mudou desde o(s) período(s) anterior(es) até agora, destacando avanços, retrocessos ou estabilidade em pontos específicos (comportamento, aprendizagem, autonomia, socialização).' : ''}
 - Termine com considerações finais e recomendações objetivas para o próximo período.
 - Português do Brasil, tom profissional pedagógico, texto corrido em parágrafos, sem markdown, sem títulos numerados.
 - Não invente fatos que não estejam nos registros fornecidos.`;
@@ -2399,7 +2409,7 @@ function renderEntryCard(e, canEdit){
           <button class="btn btn-danger" data-delete-entry="${e.id}">Excluir</button>
         </div>`:''}
       </div>
-      ${!e.presente ? `<div style="margin-top:8px;font-size:13.5px;color:#B23A2E;font-weight:600;">Faltou</div>` : `
+      ${!e.presente ? `<div style="margin-top:8px;font-size:13.5px;color:#B23A2E;font-weight:600;">${e.tipoFalta==='atestado'?'Faltou — Atestado médico':(e.tipoFalta==='justificada'?'Faltou — Falta justificada':'Faltou — Não justificada')}${e.motivoFalta?` <span style="font-weight:400;">(${esc(e.motivoFalta)})</span>`:''}</div>` : `
         <div style="display:flex; gap:18px; margin-top:8px; font-size:13.5px;">
           <span><strong style="color:var(--silver);">Chegada:</strong> ${esc(e.chegada)||'—'}</span>
           <span><strong style="color:var(--silver);">Saída:</strong> ${esc(e.saida)||'—'}</span>
@@ -2481,7 +2491,7 @@ function renderMonthlyReport(student, entries){
         ${sorted.map(e=>`
           <div class="entry-card" style="border-left:3px solid #C9A227; padding-left:14px;">
             <div class="serif" style="font-size:14px;color:#B8860B;font-weight:700;">${fmtDateBR(e.data)} <span style="font-size:11.5px;color:var(--dim);font-weight:400;text-transform:capitalize;">— ${weekdayBR(e.data)}</span></div>
-            ${!e.presente ? `<div style="font-size:13px;color:#B23A2E;margin-top:3px;">Faltou</div>` : `
+            ${!e.presente ? `<div style="font-size:13px;color:#B23A2E;margin-top:3px;">${e.tipoFalta==='atestado'?'Faltou — Atestado':(e.tipoFalta==='justificada'?'Faltou — Justificada':'Faltou')}</div>` : `
               <div style="font-size:12.5px;color:var(--dim);margin-top:3px;">Chegada ${esc(e.chegada)||'—'} · Saída ${esc(e.saida)||'—'}</div>
               ${(e.atividades||[]).length>0 ? `<div style="font-size:12.5px;margin-top:4px;">${e.atividades.map(a=>`${a.horario?esc(a.horario)+' — ':''}${esc(a.descricao)||'atividade'} (${STATUS[a.status]?.label})`).join('; ')}</div>` : ''}
             `}
@@ -2560,10 +2570,31 @@ function renderPedagogicoReport(student){
         `).join('')}
       </div>
 
+      <div class="no-print" style="margin:22px 0; border:1px solid var(--border-soft); border-radius:10px; padding:16px 18px; background:var(--panel-alt);">
+        <div class="label-mini" style="color:#B8860B; margin-bottom:8px;">📎 Relatórios anteriores deste aluno (opcional)</div>
+        <div style="font-size:12px; color:var(--dim); margin-bottom:12px;">Cole ou envie o texto de pareceres/relatórios anteriores. A IA vai usá-los como base para escrever a <strong>evolução</strong> do aluno, comparando com os registros deste período.</div>
+        <div id="relatorios-anteriores-lista" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
+          ${(student.relatoriosAnteriores||[]).length===0 ? `<div style="font-size:12.5px; color:var(--dim); font-style:italic;">Nenhum relatório anterior cadastrado ainda.</div>` : (student.relatoriosAnteriores||[]).map(r=>`
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--panel); border:1px solid var(--border-soft); border-radius:7px; padding:8px 10px;">
+              <div><strong style="font-size:12.5px;">${esc(r.titulo||'Relatório')}</strong> <span style="font-size:11px; color:var(--dim);">— ${fmtDateBR(r.data)} — ${r.texto.length} caracteres</span></div>
+              <button class="btn btn-danger" data-remove-relatorio="${r.id}" style="padding:4px 10px; font-size:11.5px;">Remover</button>
+            </div>
+          `).join('')}
+        </div>
+        <div class="grid3">
+          <label class="field"><span>Título</span><input id="f-rel-titulo" placeholder="Ex: Parecer 1º Bimestre 2026"></label>
+          <label class="field"><span>Data</span><input type="date" id="f-rel-data" value="${todayISO()}"></label>
+          <label class="field"><span>Anexar arquivo .txt (opcional)</span><input type="file" id="f-rel-arquivo" accept=".txt"></label>
+        </div>
+        <label class="field" style="margin-top:10px;"><span>Texto do relatório</span><textarea id="f-rel-texto" rows="4" placeholder="Cole aqui o texto do relatório/parecer anterior..."></textarea></label>
+        <button class="btn btn-gold" id="btn-add-relatorio-anterior" style="margin-top:10px;">+ Adicionar relatório anterior</button>
+      </div>
+
       <div class="no-print" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <div class="label-mini" style="font-size:11px;color:#B8860B;">Relatório pedagógico (editável)</div>
         <button class="btn btn-gold" id="btn-ia-relatorio">🤖 Gerar com IA (Claude)</button>
       </div>
+
       <textarea id="pedagogico-text" style="min-height:340px; font-size:13.5px; line-height:1.6; resize:vertical;">${esc(gerado.texto)}</textarea>
 
       <div id="pedagogico-photos-section" style="display:none; margin-top:20px;">
@@ -3646,11 +3677,40 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('btn-back-calendar-p')?.addEventListener('click', ()=>{ uiState.view='ficha'; renderApp(); });
   document.getElementById('btn-print-report')?.addEventListener('click', ()=> window.print());
   document.getElementById('btn-print-pedagogico')?.addEventListener('click', ()=> window.print());
+
+  document.getElementById('f-rel-arquivo')?.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{ document.getElementById('f-rel-texto').value = ev.target.result; };
+    reader.readAsText(file, 'UTF-8');
+  });
+
+  document.getElementById('btn-add-relatorio-anterior')?.addEventListener('click', async ()=>{
+    const titulo = document.getElementById('f-rel-titulo').value.trim();
+    const data = document.getElementById('f-rel-data').value;
+    const texto = document.getElementById('f-rel-texto').value.trim();
+    if(!texto){ alert('Cole ou envie o texto do relatório antes de adicionar.'); return; }
+    if(!selected.relatoriosAnteriores) selected.relatoriosAnteriores = [];
+    selected.relatoriosAnteriores.push({ id: uid(), titulo: titulo||'Relatório anterior', data: data||todayISO(), texto });
+    await persistImmediate();
+    renderApp();
+  });
+
+  document.querySelectorAll('[data-remove-relatorio]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('Remover este relatório anterior?')) return;
+      selected.relatoriosAnteriores = (selected.relatoriosAnteriores||[]).filter(r=>r.id!==btn.dataset.removeRelatorio);
+      await persistImmediate();
+      renderApp();
+    });
+  });
+
   document.getElementById('btn-ia-relatorio')?.addEventListener('click', async ()=>{
     const btn = document.getElementById('btn-ia-relatorio');
     const [start,end] = bimestreRange(uiState.bimYear, uiState.bim);
     const entries = (appData.entries[selected.id]||[]).filter(e=> e.data>=start && e.data<=end);
-    const prompt = montarPromptRelatorioPedagogico(selected, entries, uiState.bim, uiState.bimYear, start, end);
+    const prompt = montarPromptRelatorioPedagogico(selected, entries, uiState.bim, uiState.bimYear, start, end, selected.relatoriosAnteriores||[]);
     btn.disabled = true; btn.textContent = 'Gerando…';
     try{
       const texto = await chamarIA(prompt, (provider, tentativa)=>{ btn.textContent = `Gerando… (${PROVIDER_LABEL[provider]||provider}${tentativa>1?', tentativa '+tentativa:''})`; });
@@ -3868,7 +3928,7 @@ function activityRowHTML(a){
 
 function openEntryModal(existing, defaultDate, student){
   const mr = document.getElementById('modal-root');
-  const f = existing ? JSON.parse(JSON.stringify(existing)) : { data: defaultDate||todayISO(), presente:true, chegada:'', saida:'', atividades:[], desenvolvimento:'' };
+  const f = existing ? JSON.parse(JSON.stringify(existing)) : { data: defaultDate||todayISO(), presente:true, chegada:'', saida:'', atividades:[], desenvolvimento:'', tipoFalta:'', motivoFalta:'' };
 
   mr.innerHTML = `
     <div class="overlay" id="ov-entry">
@@ -3883,6 +3943,18 @@ function openEntryModal(existing, defaultDate, student){
             </select>
           </label>
           <div></div>
+        </div>
+        <div id="absence-block" style="display:${f.presente?'none':'block'}; margin-top:12px;">
+          <div class="grid3">
+            <label class="field"><span>Tipo de falta</span>
+              <select id="f-tipo-falta">
+                <option value="" ${!f.tipoFalta?'selected':''}>Não justificada</option>
+                <option value="atestado" ${f.tipoFalta==='atestado'?'selected':''}>Atestado médico</option>
+                <option value="justificada" ${f.tipoFalta==='justificada'?'selected':''}>Falta justificada (ex: CAPS, terapia)</option>
+              </select>
+            </label>
+            <label class="field full" style="grid-column:span 2;"><span>Motivo / observação</span><input id="f-motivo-falta" value="${esc(f.motivoFalta||'')}" placeholder="Ex: Tratamento no CAPS em horário de aula"></label>
+          </div>
         </div>
         <div id="presence-block" style="display:${f.presente?'block':'none'};">
           <div class="grid3" style="margin-top:12px;">
@@ -3956,6 +4028,7 @@ function openEntryModal(existing, defaultDate, student){
 
   document.getElementById('f-presente').addEventListener('change', (e)=>{
     document.getElementById('presence-block').style.display = e.target.value==='sim' ? 'block':'none';
+    document.getElementById('absence-block').style.display = e.target.value==='nao' ? 'block':'none';
   });
 
   attachMic(document.getElementById('mic-dev'), document.getElementById('f-dev'));
@@ -4009,6 +4082,8 @@ function openEntryModal(existing, defaultDate, student){
       chegada: presente ? document.getElementById('f-chegada').value : '',
       saida: presente ? document.getElementById('f-saida').value : '',
       atividades: presente ? atividades : [],
+      tipoFalta: !presente ? document.getElementById('f-tipo-falta').value : '',
+      motivoFalta: !presente ? document.getElementById('f-motivo-falta').value.trim() : '',
       desenvolvimento: document.getElementById('f-dev').value,
       fotosCount: entryPhotos.length,
     };
