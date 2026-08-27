@@ -1388,15 +1388,27 @@ function emptyData(){
 }
 function currentUser(){ return appData.users.find(u=>u.id===session.userId) || null; }
 function contarNotificacoesNaoLidas(){
-  if(!appData || !appData.notificacoes || !appData.notificacoes.length) return 0;
+  if(!appData) return 0;
+  const user = currentUser();
   const key = 'maximus-last-seen-notif-' + (session.userId||'anon');
   const lastSeen = Number(localStorage.getItem(key) || 0);
-  return appData.notificacoes.filter(n=> n.data > lastSeen).length;
+  let total = (appData.notificacoes||[]).filter(n=> n.data > lastSeen).length;
+  if(user && user.role==='desenvolvedor'){
+    total += (appData.mensagensSuporte||[]).filter(m=> !m.resposta).length;
+  } else if(user){
+    total += (appData.mensagensSuporte||[]).filter(m=> m.usuarioId===user.id && m.resposta && m.dataResposta > lastSeen).length;
+  }
+  return total;
 }
 function marcarNotificacoesComoVistas(){
-  if(!appData || !appData.notificacoes || !appData.notificacoes.length) return;
+  if(!appData) return;
   const key = 'maximus-last-seen-notif-' + (session.userId||'anon');
-  const maisRecente = Math.max(...appData.notificacoes.map(n=>n.data));
+  const datas = [
+    ...(appData.notificacoes||[]).map(n=>n.data),
+    ...(appData.mensagensSuporte||[]).filter(m=>m.resposta).map(m=>m.dataResposta),
+  ];
+  if(datas.length===0) return;
+  const maisRecente = Math.max(...datas);
   localStorage.setItem(key, String(maisRecente));
 }
 
@@ -3169,6 +3181,7 @@ function openNotificacoesModal(){
   const isDev = user && user.role==='desenvolvedor';
   const notifs = (appData.notificacoes||[]).slice().sort((a,b)=> b.data-a.data);
   const mensagens = (appData.mensagensSuporte||[]).slice().sort((a,b)=> b.data-a.data);
+  const minhasMensagens = user ? mensagens.filter(m=>m.usuarioId===user.id) : [];
   const dias = user ? diasRestantes(user.pagamentoExpira) : null;
   let statusAssinaturaTxt;
   if(isDev) statusAssinaturaTxt = '';
@@ -3194,10 +3207,13 @@ function openNotificacoesModal(){
         <div class="label-mini">Avisos do sistema</div>
         <div style="max-height:180px; overflow-y:auto; margin:8px 0 16px; border:1px solid var(--border-soft); border-radius:8px;">
           ${notifs.length===0?`<div style="padding:14px; font-size:12.5px; color:var(--dim);">Nenhum aviso no momento.</div>`:notifs.map(n=>`
-            <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft);">
-              <div style="font-weight:700; font-size:13px;">${esc(n.titulo)}</div>
-              <div style="font-size:12.5px; margin-top:2px;">${esc(n.mensagem)}</div>
-              <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(n.data).toISOString().slice(0,10))}</div>
+            <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft); display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
+              <div>
+                <div style="font-weight:700; font-size:13px;">${esc(n.titulo)}</div>
+                <div style="font-size:12.5px; margin-top:2px;">${esc(n.mensagem)}</div>
+                <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(n.data).toISOString().slice(0,10))}</div>
+              </div>
+              ${isDev?`<button class="btn btn-danger" data-remove-notif="${n.id}" style="padding:4px 9px; font-size:11px; flex-shrink:0;">Excluir</button>`:''}
             </div>
           `).join('')}
         </div>
@@ -3211,14 +3227,43 @@ function openNotificacoesModal(){
           <div class="label-mini" style="margin-top:18px;">Fale com o desenvolvedor</div>
           <label class="field" style="margin-top:8px;"><span>Sua mensagem</span><textarea id="f-msg-dev" rows="3" placeholder="Descreva o problema ou dúvida..."></textarea></label>
           <button class="btn btn-gold" id="btn-enviar-msg-dev" style="margin-top:10px;">Enviar mensagem</button>
+
+          ${minhasMensagens.length>0?`
+            <div class="label-mini" style="margin-top:18px;">Minhas mensagens</div>
+            <div style="max-height:200px; overflow-y:auto; margin-top:8px; border:1px solid var(--border-soft); border-radius:8px;">
+              ${minhasMensagens.map(m=>`
+                <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft);">
+                  <div style="font-size:12.5px;">${esc(m.mensagem)}</div>
+                  <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(m.data).toISOString().slice(0,10))}</div>
+                  ${m.resposta?`
+                    <div style="margin-top:8px; background:var(--panel-alt); border:1px solid var(--border-soft); border-radius:7px; padding:8px 10px;">
+                      <div style="font-size:10.5px; font-weight:700; color:#B8860B; text-transform:uppercase;">Resposta do desenvolvedor</div>
+                      <div style="font-size:12.5px; margin-top:3px;">${esc(m.resposta)}</div>
+                    </div>
+                  `:`<div style="font-size:11.5px; color:var(--dim); margin-top:6px; font-style:italic;">Aguardando resposta.</div>`}
+                </div>
+              `).join('')}
+            </div>
+          `:''}
         `:`
           <div class="label-mini">Mensagens recebidas dos usuários</div>
-          <div style="max-height:200px; overflow-y:auto; margin-top:8px; border:1px solid var(--border-soft); border-radius:8px;">
+          <div style="max-height:280px; overflow-y:auto; margin-top:8px; border:1px solid var(--border-soft); border-radius:8px;">
             ${mensagens.length===0?`<div style="padding:14px; font-size:12.5px; color:var(--dim);">Nenhuma mensagem recebida.</div>`:mensagens.map(m=>`
               <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft);">
                 <div style="font-weight:700; font-size:12.5px;">${esc(m.usuarioNome)} <span style="font-weight:400; color:var(--dim);">(${ROLE_LABEL[m.usuarioRole]||m.usuarioRole})</span></div>
                 <div style="font-size:12.5px; margin-top:2px;">${esc(m.mensagem)}</div>
                 <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(m.data).toISOString().slice(0,10))}</div>
+                ${m.resposta?`
+                  <div style="margin-top:8px; background:var(--panel-alt); border:1px solid var(--border-soft); border-radius:7px; padding:8px 10px;">
+                    <div style="font-size:10.5px; font-weight:700; color:#B8860B; text-transform:uppercase;">Sua resposta</div>
+                    <div style="font-size:12.5px; margin-top:3px;">${esc(m.resposta)}</div>
+                  </div>
+                `:`
+                  <div style="margin-top:8px; display:flex; gap:6px;">
+                    <input data-resposta-input="${m.id}" placeholder="Escrever resposta..." style="flex:1; font-size:12.5px;">
+                    <button class="btn btn-gold" data-enviar-resposta="${m.id}" style="padding:6px 12px; font-size:11.5px; flex-shrink:0;">Responder</button>
+                  </div>
+                `}
               </div>
             `).join('')}
           </div>
@@ -3242,6 +3287,27 @@ function openNotificacoesModal(){
     appData.notificacoes.push({ id: uid(), titulo, mensagem, data: Date.now(), autor: user.nome });
     await persistImmediate();
     close(); openNotificacoesModal();
+  });
+
+  document.querySelectorAll('[data-remove-notif]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('Excluir este aviso? Ele deixará de aparecer para todos os usuários.')) return;
+      appData.notificacoes = (appData.notificacoes||[]).filter(n=>n.id!==btn.dataset.removeNotif);
+      await persistImmediate();
+      close(); openNotificacoesModal();
+    });
+  });
+
+  document.querySelectorAll('[data-enviar-resposta]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const input = document.querySelector(`[data-resposta-input="${btn.dataset.enviarResposta}"]`);
+      const resposta = input.value.trim();
+      if(!resposta){ alert('Escreva uma resposta antes de enviar.'); return; }
+      const m = (appData.mensagensSuporte||[]).find(x=>x.id===btn.dataset.enviarResposta);
+      if(m){ m.resposta = resposta; m.dataResposta = Date.now(); }
+      await persistImmediate();
+      close(); openNotificacoesModal();
+    });
   });
 
   document.getElementById('btn-cancelar-assinatura')?.addEventListener('click', async ()=>{
