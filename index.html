@@ -749,7 +749,7 @@ async function chamarClaudeIA(promptTexto){
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1600,
         messages: [{ role: 'user', content: promptTexto }],
       }),
@@ -877,15 +877,17 @@ async function chamarIA(promptTexto, onTentativa){
   const ordem = [preferido, ...PROVIDER_ORDER.filter(p=>p!==preferido)];
   const disponiveis = ordem.filter(temChaveProvider);
   if(disponiveis.length===0) throw new Error('NO_KEY');
-  let ultimoErro = null;
+  const erros = [];
   for(const provider of disponiveis){
     try{
       return await chamarComRetry(provider, promptTexto, 2, onTentativa);
     }catch(e){
-      ultimoErro = e;
+      erros.push(`${PROVIDER_LABEL[provider]||provider}: ${e.message||'erro desconhecido'}`);
     }
   }
-  throw new Error('TODOS_FALHARAM:' + (ultimoErro ? ultimoErro.message : ''));
+  const err = new Error('TODOS_FALHARAM');
+  err.detalhes = erros.join('\n');
+  throw err;
 }
 
 function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStart, periodoEnd, relatoriosAnteriores){
@@ -3590,7 +3592,7 @@ function wireAppListeners(selected, canEdit, isDev){
         document.getElementById('pei-parecer-text').value = texto;
       }catch(e){
         if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
-        else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+        else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA respondeu. Detalhes:\n\n' + (e.detalhes||'(sem detalhes)'));
         else alert('Erro ao gerar com IA: ' + e.message);
       }finally{
         btn.disabled = false; btn.textContent = '🤖 Gerar com IA';
@@ -3631,7 +3633,7 @@ function wireAppListeners(selected, canEdit, isDev){
           if(avalEl && parsed.avaliacao){ avalEl.value = parsed.avaliacao; avalEl.dispatchEvent(new Event('input')); }
         }catch(e){
           if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
-          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA respondeu. Detalhes:\n\n' + (e.detalhes||'(sem detalhes)'));
         else alert('Erro ao gerar com IA: ' + e.message);
         }finally{
           btn.disabled = false; btn.textContent = '🤖 Gerar conteúdo com IA';
@@ -3657,7 +3659,7 @@ function wireAppListeners(selected, canEdit, isDev){
           if(el){ el.value = texto; el.dispatchEvent(new Event('input')); }
         }catch(e){
           if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
-          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA respondeu. Detalhes:\n\n' + (e.detalhes||'(sem detalhes)'));
           else alert('Erro ao gerar com IA: ' + e.message);
         }finally{
           btn.disabled = false; btn.textContent = '🤖 Gerar com IA';
@@ -3697,7 +3699,7 @@ function wireAppListeners(selected, canEdit, isDev){
           }
         }catch(e){
           if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
-          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+          else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA respondeu. Detalhes:\n\n' + (e.detalhes||'(sem detalhes)'));
           else alert('Erro ao buscar sugestão: ' + e.message);
         }finally{
           btn.disabled = false; btn.textContent = '🤖 Sugerir com IA (baseado na turma)';
@@ -3817,7 +3819,7 @@ function wireAppListeners(selected, canEdit, isDev){
       ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
     }catch(e){
       if(e.message==='NO_KEY') alert('Configure sua chave de IA (Gemini ou Groq) em "Gerenciar usuários" antes de usar essa opção.');
-      else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA configurado respondeu (todos falharam ou estão sobrecarregados). Tente novamente em instantes.');
+      else if(e.message && e.message.startsWith('TODOS_FALHARAM')) alert('Nenhum provedor de IA respondeu. Detalhes:\n\n' + (e.detalhes||'(sem detalhes)'));
         else alert('Erro ao gerar com IA: ' + e.message);
     }finally{
       btn.disabled = false; btn.textContent = '🤖 Gerar com IA (Claude)';
