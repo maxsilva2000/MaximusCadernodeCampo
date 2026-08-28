@@ -238,6 +238,14 @@ const WEEKDAYS_LONG=['domingo','segunda-feira','terça-feira','quarta-feira','qu
 const WEEKDAYS_SHORT=['D','S','T','Q','Q','S','S'];
 const MONTHS_PT=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const weekdayBR = iso => WEEKDAYS_LONG[new Date(iso+'T12:00:00').getDay()];
+const CUIDADOS_LABELS = {
+  alimentacao: { realizou:'Realizou alimentação', nao_realizou:'Não realizou alimentação', parcial:'Realizou parcialmente' },
+  higienizacao: { sozinho:'Consegue realizar sozinho(a)', com_ajuda:'Consegue com ajuda', nao_consegue:'Não consegue realizar' },
+  locomocao: { sozinho:'Anda/locomove-se sozinho(a)', com_auxilio:'Anda/locomove-se com auxílio', nao_anda:'Não anda / não se locomove', rotas_especificas:'Segue apenas rotas específicas conhecidas' },
+};
+function labelCuidado(campo, valor){
+  return (CUIDADOS_LABELS[campo] && CUIDADOS_LABELS[campo][valor]) || valor || '';
+}
 const STATUS = {
   realizada:{label:'Realizada', color:'#3F7D45', bg:'#E9F3E9'},
   parcial:{label:'Parcial', color:'#9C7209', bg:'#FBF1DA'},
@@ -889,6 +897,13 @@ function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStar
       return linha + rotuloFalta + (e.motivoFalta ? ` (${e.motivoFalta})` : '') + '.';
     }
     linha += `Presente, chegada ${e.chegada||'-'}, saída ${e.saida||'-'}.`;
+    if(e.alimentacao||e.higienizacao||e.locomocao){
+      const cuidados = [];
+      if(e.alimentacao) cuidados.push('Alimentação: ' + labelCuidado('alimentacao', e.alimentacao));
+      if(e.higienizacao) cuidados.push('Higienização: ' + labelCuidado('higienizacao', e.higienizacao));
+      if(e.locomocao) cuidados.push('Locomoção: ' + labelCuidado('locomocao', e.locomocao));
+      linha += ' ' + cuidados.join('. ') + '.';
+    }
     if(e.atividades && e.atividades.length){
       linha += ' Atividades: ' + e.atividades.map(a=>`${a.descricao||'atividade'} (${STATUS[a.status]?.label})`).join('; ') + '.';
     }
@@ -2436,6 +2451,13 @@ function renderEntryCard(e, canEdit){
           <span><strong style="color:var(--silver);">Chegada:</strong> ${esc(e.chegada)||'—'}</span>
           <span><strong style="color:var(--silver);">Saída:</strong> ${esc(e.saida)||'—'}</span>
         </div>
+        ${(e.alimentacao||e.higienizacao||e.locomocao) ? `
+          <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:12.5px;">
+            ${e.alimentacao?`<span><strong style="color:var(--silver);">Alimentação:</strong> ${esc(labelCuidado('alimentacao', e.alimentacao))}</span>`:''}
+            ${e.higienizacao?`<span><strong style="color:var(--silver);">Higienização:</strong> ${esc(labelCuidado('higienizacao', e.higienizacao))}</span>`:''}
+            ${e.locomocao?`<span><strong style="color:var(--silver);">Locomoção:</strong> ${esc(labelCuidado('locomocao', e.locomocao))}</span>`:''}
+          </div>
+        `:''}
         ${(e.atividades&&e.atividades.length>0) ? `
           <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
             ${e.atividades.map(a=>{
@@ -4004,7 +4026,7 @@ function activityRowHTML(a){
 
 function openEntryModal(existing, defaultDate, student){
   const mr = document.getElementById('modal-root');
-  const f = existing ? JSON.parse(JSON.stringify(existing)) : { data: defaultDate||todayISO(), presente:true, chegada:'', saida:'', atividades:[], desenvolvimento:'', tipoFalta:'', motivoFalta:'' };
+  const f = existing ? JSON.parse(JSON.stringify(existing)) : { data: defaultDate||todayISO(), presente:true, chegada:'', saida:'', atividades:[], desenvolvimento:'', tipoFalta:'', motivoFalta:'', alimentacao:'', higienizacao:'', locomocao:'' };
 
   mr.innerHTML = `
     <div class="overlay" id="ov-entry">
@@ -4045,6 +4067,36 @@ function openEntryModal(existing, defaultDate, student){
             </div>
             <div id="activities-container" style="margin-top:10px;">
               ${f.atividades.length===0?'<div id="no-activities" style="font-size:13px;color:var(--dim);font-style:italic;">Nenhuma atividade adicionada ainda.</div>':f.atividades.map(activityRowHTML).join('')}
+            </div>
+          </div>
+          <div style="margin-top:20px;">
+            <span class="label-mini" style="color:#B8860B;">Cuidados diários</span>
+            <div class="grid3" style="margin-top:10px;">
+              <label class="field"><span>Alimentação</span>
+                <select id="f-alimentacao">
+                  <option value="" ${!f.alimentacao?'selected':''}>Não registrado</option>
+                  <option value="realizou" ${f.alimentacao==='realizou'?'selected':''}>Realizou alimentação</option>
+                  <option value="nao_realizou" ${f.alimentacao==='nao_realizou'?'selected':''}>Não realizou alimentação</option>
+                  <option value="parcial" ${f.alimentacao==='parcial'?'selected':''}>Realizou parcialmente</option>
+                </select>
+              </label>
+              <label class="field"><span>Higienização</span>
+                <select id="f-higienizacao">
+                  <option value="" ${!f.higienizacao?'selected':''}>Não registrado</option>
+                  <option value="sozinho" ${f.higienizacao==='sozinho'?'selected':''}>Consegue realizar sozinho(a)</option>
+                  <option value="com_ajuda" ${f.higienizacao==='com_ajuda'?'selected':''}>Consegue com ajuda</option>
+                  <option value="nao_consegue" ${f.higienizacao==='nao_consegue'?'selected':''}>Não consegue realizar</option>
+                </select>
+              </label>
+              <label class="field"><span>Locomoção</span>
+                <select id="f-locomocao">
+                  <option value="" ${!f.locomocao?'selected':''}>Não registrado</option>
+                  <option value="sozinho" ${f.locomocao==='sozinho'?'selected':''}>Anda/locomove-se sozinho(a)</option>
+                  <option value="com_auxilio" ${f.locomocao==='com_auxilio'?'selected':''}>Anda/locomove-se com auxílio</option>
+                  <option value="nao_anda" ${f.locomocao==='nao_anda'?'selected':''}>Não anda / não se locomove</option>
+                  <option value="rotas_especificas" ${f.locomocao==='rotas_especificas'?'selected':''}>Segue apenas rotas específicas conhecidas</option>
+                </select>
+              </label>
             </div>
           </div>
         </div>
@@ -4160,6 +4212,9 @@ function openEntryModal(existing, defaultDate, student){
       atividades: presente ? atividades : [],
       tipoFalta: !presente ? document.getElementById('f-tipo-falta').value : '',
       motivoFalta: !presente ? document.getElementById('f-motivo-falta').value.trim() : '',
+      alimentacao: presente ? document.getElementById('f-alimentacao').value : '',
+      higienizacao: presente ? document.getElementById('f-higienizacao').value : '',
+      locomocao: presente ? document.getElementById('f-locomocao').value : '',
       desenvolvimento: document.getElementById('f-dev').value,
       fotosCount: entryPhotos.length,
     };
