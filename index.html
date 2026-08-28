@@ -2379,6 +2379,11 @@ function loadAvatarInto(studentId){
 function renderCalendar(entriesByDate){
   const weeks = getMonthMatrix(uiState.calYear, uiState.calMonth);
   const today = todayISO();
+  const coresStatus = {
+    presente: { bg:'#1E8449', fg:'#FFFFFF' },
+    justificada: { bg:'#F1C40F', fg:'#3D2B00' },
+    faltou: { bg:'#C0392B', fg:'#FFFFFF' },
+  };
   return `
     <div class="calendar no-print">
       <div class="cal-head">
@@ -2394,17 +2399,22 @@ function renderCalendar(entriesByDate){
             const e = entriesByDate[iso];
             const dayNum = parseInt(iso.slice(-2),10);
             const isToday = iso===today;
-            const dotColor = e ? (e.presente ? '#B8860B' : '#B23A2E') : '';
-            return `<button class="cal-day ${e?'has-entry':''} ${isToday?'today':''}" data-pick-day="${iso}">
+            let statusKey = null;
+            if(e){
+              statusKey = e.presente ? 'presente' : ((e.tipoFalta==='atestado'||e.tipoFalta==='justificada') ? 'justificada' : 'faltou');
+            }
+            const cor = statusKey ? coresStatus[statusKey] : null;
+            const style = cor ? `background:${cor.bg}; color:${cor.fg}; font-weight:800;` : '';
+            return `<button class="cal-day ${e?'has-entry':''} ${isToday?'today':''}" style="${style}" data-pick-day="${iso}">
               ${dayNum}
-              ${e ? `<span class="cal-dot" style="background:${dotColor};"></span>` : ''}
             </button>`;
           }).join('')}
         </div>
       `).join('')}
       <div class="cal-legend">
-        <span><span class="dot" style="background:#B8860B;"></span>presente</span>
-        <span><span class="dot" style="background:#B23A2E;"></span>faltou</span>
+        <span><span class="dot" style="background:${coresStatus.presente.bg};"></span>presente</span>
+        <span><span class="dot" style="background:${coresStatus.justificada.bg};"></span>falta justificada</span>
+        <span><span class="dot" style="background:${coresStatus.faltou.bg};"></span>faltou</span>
       </div>
     </div>
   `;
