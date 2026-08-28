@@ -736,7 +736,7 @@ async function chamarClaudeIA(promptTexto){
   const key = getAnthropicKey();
   if(!key) throw new Error('NO_KEY');
   const controller = new AbortController();
-  const timeoutId = setTimeout(()=> controller.abort(), 20000);
+  const timeoutId = setTimeout(()=> controller.abort(), 30000);
   let res;
   try{
     res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -776,7 +776,7 @@ async function chamarGeminiIA(promptTexto){
   if(!key) throw new Error('NO_KEY');
   const model = 'gemini-flash-latest';
   const controller = new AbortController();
-  const timeoutId = setTimeout(()=> controller.abort(), 20000);
+  const timeoutId = setTimeout(()=> controller.abort(), 30000);
   let res;
   try{
     res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -813,7 +813,7 @@ async function chamarGroqIA(promptTexto, model){
   const key = getGroqKey();
   if(!key) throw new Error('NO_KEY');
   const controller = new AbortController();
-  const timeoutId = setTimeout(()=> controller.abort(), 20000);
+  const timeoutId = setTimeout(()=> controller.abort(), 30000);
   let res;
   try{
     res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -843,8 +843,8 @@ async function chamarGroqIA(promptTexto, model){
 }
 
 const PROVIDER_ORDER = ['claude', 'gemini', 'groq-llama', 'groq-kimi'];
-const PROVIDER_LABEL = { claude:'Claude (Anthropic)', gemini:'Gemini', 'groq-llama':'Groq (Llama)', 'groq-kimi':'Groq (Kimi K2)' };
-const GROQ_MODELS = { 'groq-llama':'llama-3.3-70b-versatile', 'groq-kimi':'moonshotai/kimi-k2-instruct-0905' };
+const PROVIDER_LABEL = { claude:'Claude (Anthropic)', gemini:'Gemini', 'groq-llama':'Groq (GPT-OSS 120B)', 'groq-kimi':'Groq (GPT-OSS 20B)' };
+const GROQ_MODELS = { 'groq-llama':'openai/gpt-oss-120b', 'groq-kimi':'openai/gpt-oss-20b' };
 
 function temChaveProvider(provider){
   if(provider==='claude') return !!getAnthropicKey();
@@ -3062,8 +3062,8 @@ function renderUserManagement(){
           <select id="ia-provider-select">
             <option value="claude" ${provider==='claude'?'selected':''}>Claude (Anthropic) — pago, alta qualidade</option>
             <option value="gemini" ${provider==='gemini'?'selected':''}>Gemini (Google) — gratuito, dados podem treinar modelos do Google</option>
-            <option value="groq-llama" ${provider==='groq-llama'?'selected':''}>Groq — Llama 3.3 70B — gratuito, sem cartão de crédito</option>
-            <option value="groq-kimi" ${provider==='groq-kimi'?'selected':''}>Groq — Kimi K2 — gratuito, sem cartão de crédito</option>
+            <option value="groq-llama" ${provider==='groq-llama'?'selected':''}>Groq — GPT-OSS 120B — gratuito, sem cartão de crédito</option>
+            <option value="groq-kimi" ${provider==='groq-kimi'?'selected':''}>Groq — GPT-OSS 20B — gratuito, sem cartão de crédito</option>
           </select>
         </label>
         <div style="font-size:11px; color:var(--dim); margin-top:-6px; margin-bottom:12px;">Llama e Kimi K2 usam a mesma chave do Groq (só uma chave é necessária pros dois).</div>
