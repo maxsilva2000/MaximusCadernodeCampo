@@ -1411,11 +1411,23 @@ function contarNotificacoesNaoLidas(){
   const lastSeen = Number(localStorage.getItem(key) || 0);
   let total = (appData.notificacoes||[]).filter(n=> n.data > lastSeen).length;
   if(user && user.role==='desenvolvedor'){
-    total += (appData.mensagensSuporte||[]).filter(m=> !m.resposta).length;
+    total += (appData.mensagensSuporte||[]).filter(m=> !m.resposta && !m.lida).length;
   } else if(user){
     total += (appData.mensagensSuporte||[]).filter(m=> m.usuarioId===user.id && m.resposta && m.dataResposta > lastSeen).length;
   }
   return total;
+}
+function contarMensagensGestorNaoLidas(){
+  if(!appData) return 0;
+  const user = currentUser();
+  if(!user) return 0;
+  if(user.role==='gestor'){
+    return (appData.mensagensGestor||[]).filter(m=> m.deId===user.id && m.resposta && !m.lidaPeloAutor).length;
+  }
+  if(user.role==='professor'){
+    return (appData.mensagensGestor||[]).filter(m=> m.paraId===user.id && !m.resposta && !m.lida).length;
+  }
+  return 0;
 }
 function marcarNotificacoesComoVistas(){
   if(!appData) return;
@@ -1440,6 +1452,7 @@ function migrateAppData(){
   if(!appData.entries) appData.entries = {};
   if(!appData.notificacoes) appData.notificacoes = [];
   if(!appData.mensagensSuporte) appData.mensagensSuporte = [];
+  if(!appData.mensagensGestor) appData.mensagensGestor = [];
   if(!appData.iaConfig) appData.iaConfig = {provider:'claude', geminiKey:'', groqKey:'', anthropicKey:''};
   if(!appData.escolas || appData.escolas.length===0){
     appData.escolas = [
@@ -2298,6 +2311,7 @@ function renderMainApp_root(){
           <div style="margin-left:auto; display:flex; align-items:center; gap:10px;">
             <span style="font-size:12.5px;">${esc(user.nome)}</span>
             <span class="role-pill ${user.role}">${ROLE_LABEL[user.role]}</span>
+            ${(user.role==='gestor'||user.role==='professor')?`<button class="btn" id="btn-mensagens-gestor" style="position:relative;" title="Mensagens">💬${(()=>{ const n=contarMensagensGestorNaoLidas(); return n>0?`<span style="position:absolute; top:-6px; right:-6px; background:#B23A2E; color:#fff; border-radius:10px; font-size:10px; padding:1px 5px; line-height:1.4;">${n}</span>`:''; })()}</button>`:''}
             <button class="btn" id="btn-notificacoes" style="position:relative;" title="Notificações e suporte">🔔${(()=>{ const n=contarNotificacoesNaoLidas(); return n>0?`<span style="position:absolute; top:-6px; right:-6px; background:#B23A2E; color:#fff; border-radius:10px; font-size:10px; padding:1px 5px; line-height:1.4;">${n}</span>`:''; })()}</button>
             <button class="btn" id="btn-logout">Sair</button>
           </div>
@@ -3284,7 +3298,10 @@ function openNotificacoesModal(){
           <div style="max-height:280px; overflow-y:auto; margin-top:8px; border:1px solid var(--border-soft); border-radius:8px;">
             ${mensagens.length===0?`<div style="padding:14px; font-size:12.5px; color:var(--dim);">Nenhuma mensagem recebida.</div>`:mensagens.map(m=>`
               <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft);">
-                <div style="font-weight:700; font-size:12.5px;">${esc(m.usuarioNome)} <span style="font-weight:400; color:var(--dim);">(${ROLE_LABEL[m.usuarioRole]||m.usuarioRole})</span></div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                  <div style="font-weight:700; font-size:12.5px;">${esc(m.usuarioNome)} <span style="font-weight:400; color:var(--dim);">(${ROLE_LABEL[m.usuarioRole]||m.usuarioRole})</span> ${m.lida&&!m.resposta?'<span style="color:#3F7D45; font-weight:400; font-size:11px;">✓ lida</span>':''}</div>
+                  <button class="btn btn-danger" data-remove-msg-suporte="${m.id}" style="padding:3px 8px; font-size:10.5px; flex-shrink:0;">Excluir</button>
+                </div>
                 <div style="font-size:12.5px; margin-top:2px;">${esc(m.mensagem)}</div>
                 <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(m.data).toISOString().slice(0,10))}</div>
                 ${m.resposta?`
@@ -3293,9 +3310,10 @@ function openNotificacoesModal(){
                     <div style="font-size:12.5px; margin-top:3px;">${esc(m.resposta)}</div>
                   </div>
                 `:`
-                  <div style="margin-top:8px; display:flex; gap:6px;">
-                    <input data-resposta-input="${m.id}" placeholder="Escrever resposta..." style="flex:1; font-size:12.5px;">
+                  <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+                    <input data-resposta-input="${m.id}" placeholder="Escrever resposta..." style="flex:1; min-width:120px; font-size:12.5px;">
                     <button class="btn btn-gold" data-enviar-resposta="${m.id}" style="padding:6px 12px; font-size:11.5px; flex-shrink:0;">Responder</button>
+                    ${!m.lida?`<button class="btn" data-marcar-lida="${m.id}" style="padding:6px 10px; font-size:11.5px; flex-shrink:0;">Marcar como lida</button>`:''}
                   </div>
                 `}
               </div>
@@ -3344,6 +3362,24 @@ function openNotificacoesModal(){
     });
   });
 
+  document.querySelectorAll('[data-marcar-lida]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const m = (appData.mensagensSuporte||[]).find(x=>x.id===btn.dataset.marcarLida);
+      if(m) m.lida = true;
+      await persistImmediate();
+      close(); openNotificacoesModal();
+    });
+  });
+
+  document.querySelectorAll('[data-remove-msg-suporte]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('Excluir esta mensagem?')) return;
+      appData.mensagensSuporte = (appData.mensagensSuporte||[]).filter(x=>x.id!==btn.dataset.removeMsgSuporte);
+      await persistImmediate();
+      close(); openNotificacoesModal();
+    });
+  });
+
   document.getElementById('btn-cancelar-assinatura')?.addEventListener('click', async ()=>{
     if(!confirm('Isso vai solicitar o cancelamento da renovação da sua assinatura. Seu acesso continua válido até o fim do período já pago. Deseja continuar?')) return;
     user.cancelamentoSolicitado = true;
@@ -3373,12 +3409,132 @@ function openNotificacoesModal(){
   renderApp();
 }
 
+/* ============ mensagens gestor <-> professor ============ */
+function openMensagensGestorModal(){
+  const mr = document.getElementById('modal-root');
+  const user = currentUser();
+  if(!user) return;
+  const isGestor = user.role==='gestor';
+  const todasMensagens = (appData.mensagensGestor||[]).slice().sort((a,b)=> b.data-a.data);
+  const minhas = isGestor
+    ? todasMensagens.filter(m=> m.deId===user.id)
+    : todasMensagens.filter(m=> m.paraId===user.id);
+  const professores = isGestor ? (appData.users||[]).filter(u=> u.role==='professor' && u.status==='ativo').sort((a,b)=> (a.nome||'').localeCompare(b.nome||'')) : [];
+
+  mr.innerHTML = `
+    <div class="overlay" id="ov-msg-gestor">
+      <div class="modal" style="max-width:520px;">
+        <h3 class="serif">💬 Mensagens</h3>
+
+        ${isGestor?`
+          <div class="card" style="margin-bottom:16px;">
+            <div class="label-mini">Enviar mensagem para um(a) Professor(a)/Auxiliar</div>
+            <label class="field" style="margin-top:8px;"><span>Destinatário(a)</span>
+              <select id="f-msg-gestor-para">
+                ${professores.length===0?`<option value="">Nenhum professor ativo encontrado</option>`:professores.map(p=>`<option value="${p.id}">${esc(p.nome)}${p.escola?` — ${esc(p.escola)}`:''}</option>`).join('')}
+              </select>
+            </label>
+            <label class="field" style="margin-top:8px;"><span>Mensagem</span><textarea id="f-msg-gestor-texto" rows="3" placeholder="Ex: Poderia revisar o registro do dia 12/08 do aluno João?"></textarea></label>
+            <button class="btn btn-gold" id="btn-enviar-msg-gestor" style="margin-top:10px;" ${professores.length===0?'disabled':''}>Enviar mensagem</button>
+          </div>
+        `:''}
+
+        <div class="label-mini">${isGestor?'Mensagens enviadas':'Mensagens da coordenação'}</div>
+        <div style="max-height:340px; overflow-y:auto; margin-top:8px; border:1px solid var(--border-soft); border-radius:8px;">
+          ${minhas.length===0?`<div style="padding:14px; font-size:12.5px; color:var(--dim);">Nenhuma mensagem ainda.</div>`:minhas.map(m=>`
+            <div style="padding:10px 12px; border-bottom:1px solid var(--border-soft);">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                <div style="font-weight:700; font-size:12.5px;">${isGestor ? ('Para: '+esc(m.paraNome)) : ('De: '+esc(m.deNome))} ${(!isGestor && m.lida && !m.resposta)?'<span style="color:#3F7D45; font-weight:400; font-size:11px;">✓ lida</span>':''}</div>
+                <button class="btn btn-danger" data-remove-msg-gestor="${m.id}" style="padding:3px 8px; font-size:10.5px; flex-shrink:0;">Excluir</button>
+              </div>
+              <div style="font-size:12.5px; margin-top:2px;">${esc(m.mensagem)}</div>
+              <div style="font-size:10.5px; color:var(--dim); margin-top:4px;">${fmtDateBR(new Date(m.data).toISOString().slice(0,10))}</div>
+              ${m.resposta?`
+                <div style="margin-top:8px; background:var(--panel-alt); border:1px solid var(--border-soft); border-radius:7px; padding:8px 10px;">
+                  <div style="font-size:10.5px; font-weight:700; color:#B8860B; text-transform:uppercase;">Resposta</div>
+                  <div style="font-size:12.5px; margin-top:3px;">${esc(m.resposta)}</div>
+                </div>
+              `: isGestor ? `<div style="font-size:11.5px; color:var(--dim); margin-top:6px; font-style:italic;">Aguardando resposta.</div>` : `
+                <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+                  <input data-resposta-gestor-input="${m.id}" placeholder="Escrever resposta..." style="flex:1; min-width:120px; font-size:12.5px;">
+                  <button class="btn btn-gold" data-enviar-resposta-gestor="${m.id}" style="padding:6px 12px; font-size:11.5px; flex-shrink:0;">Responder</button>
+                  ${!m.lida?`<button class="btn" data-marcar-lida-gestor="${m.id}" style="padding:6px 10px; font-size:11.5px; flex-shrink:0;">Marcar como lida</button>`:''}
+                </div>
+              `}
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:18px;">
+          <button class="btn" id="btn-fechar-msg-gestor">Fechar</button>
+        </div>
+      </div>
+    </div>
+  `;
+  const close = ()=>{ mr.innerHTML=''; };
+  document.getElementById('btn-fechar-msg-gestor').addEventListener('click', close);
+  document.getElementById('ov-msg-gestor').addEventListener('click', (e)=>{ if(e.target.id==='ov-msg-gestor') close(); });
+
+  document.getElementById('btn-enviar-msg-gestor')?.addEventListener('click', async ()=>{
+    const paraId = document.getElementById('f-msg-gestor-para').value;
+    const mensagem = document.getElementById('f-msg-gestor-texto').value.trim();
+    if(!paraId){ alert('Selecione um(a) destinatário(a).'); return; }
+    if(!mensagem){ alert('Escreva uma mensagem antes de enviar.'); return; }
+    const para = (appData.users||[]).find(u=>u.id===paraId);
+    if(!appData.mensagensGestor) appData.mensagensGestor = [];
+    appData.mensagensGestor.push({
+      id: uid(), deId: user.id, deNome: user.nome, paraId, paraNome: para?para.nome:'',
+      mensagem, data: Date.now(), lida:false, lidaPeloAutor:false,
+    });
+    await persistImmediate();
+    close(); openMensagensGestorModal();
+  });
+
+  document.querySelectorAll('[data-enviar-resposta-gestor]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const input = document.querySelector(`[data-resposta-gestor-input="${btn.dataset.enviarRespostaGestor}"]`);
+      const resposta = input.value.trim();
+      if(!resposta){ alert('Escreva uma resposta antes de enviar.'); return; }
+      const m = (appData.mensagensGestor||[]).find(x=>x.id===btn.dataset.enviarRespostaGestor);
+      if(m){ m.resposta = resposta; m.dataResposta = Date.now(); m.lida = true; }
+      await persistImmediate();
+      close(); openMensagensGestorModal();
+    });
+  });
+
+  document.querySelectorAll('[data-marcar-lida-gestor]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const m = (appData.mensagensGestor||[]).find(x=>x.id===btn.dataset.marcarLidaGestor);
+      if(m) m.lida = true;
+      await persistImmediate();
+      close(); openMensagensGestorModal();
+    });
+  });
+
+  document.querySelectorAll('[data-remove-msg-gestor]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('Excluir esta mensagem?')) return;
+      appData.mensagensGestor = (appData.mensagensGestor||[]).filter(x=>x.id!==btn.dataset.removeMsgGestor);
+      await persistImmediate();
+      close(); openMensagensGestorModal();
+    });
+  });
+
+  if(isGestor){
+    minhas.filter(m=>m.resposta && !m.lidaPeloAutor).forEach(m=>{ m.lidaPeloAutor = true; });
+    persistImmediate();
+  }
+  renderApp();
+}
+
 /* ============ wiring ============ */
 function wireAppListeners(selected, canEdit, isDev){
   const menuBtn = document.getElementById('btn-menu');
   if(menuBtn) menuBtn.addEventListener('click', ()=>{ uiState.sidebarOpen=!uiState.sidebarOpen; renderApp(); });
   document.getElementById('btn-close-sidebar')?.addEventListener('click', ()=>{ uiState.sidebarOpen=false; renderApp(); });
   document.getElementById('sidebar-backdrop')?.addEventListener('click', ()=>{ uiState.sidebarOpen=false; renderApp(); });
+
+  document.getElementById('btn-mensagens-gestor')?.addEventListener('click', ()=> openMensagensGestorModal());
 
   document.getElementById('btn-notificacoes')?.addEventListener('click', ()=> openNotificacoesModal());
 
