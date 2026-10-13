@@ -246,6 +246,20 @@ const CUIDADOS_LABELS = {
 function labelCuidado(campo, valor){
   return (CUIDADOS_LABELS[campo] && CUIDADOS_LABELS[campo][valor]) || valor || '';
 }
+const TIPO_FALTA_INFO = {
+  '': { label:'Não justificada', calBucket:'faltou' },
+  atestado: { label:'Atestado médico', calBucket:'justificada' },
+  justificada: { label:'Falta justificada', calBucket:'justificada' },
+  feriado: { label:'Feriado', calBucket:'feriado' },
+  facultativo: { label:'Ponto facultativo', calBucket:'justificada' },
+  conselho: { label:'Conselho de classe', calBucket:'justificada' },
+};
+function labelTipoFalta(tipo){
+  return (TIPO_FALTA_INFO[tipo||''] || TIPO_FALTA_INFO['']).label;
+}
+function calBucketTipoFalta(tipo){
+  return (TIPO_FALTA_INFO[tipo||''] || TIPO_FALTA_INFO['']).calBucket;
+}
 const STATUS = {
   realizada:{label:'Realizada', color:'#3F7D45', bg:'#E9F3E9'},
   parcial:{label:'Parcial', color:'#9C7209', bg:'#FBF1DA'},
@@ -895,7 +909,7 @@ function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStar
   const registros = sorted.map(e=>{
     let linha = `${fmtDateBR(e.data)} (${weekdayBR(e.data)}): `;
     if(!e.presente){
-      const rotuloFalta = e.tipoFalta==='atestado' ? 'Falta com atestado médico' : (e.tipoFalta==='justificada' ? 'Falta justificada' : 'Falta não justificada');
+      const rotuloFalta = labelTipoFalta(e.tipoFalta);
       return linha + rotuloFalta + (e.motivoFalta ? ` (${e.motivoFalta})` : '') + '.';
     }
     linha += `Presente, chegada ${e.chegada||'-'}, saída ${e.saida||'-'}.`;
@@ -934,7 +948,7 @@ ${blocoAnteriores}
 INSTRUÇÕES:
 - Escreva um relatório corrido (não uma lista de tópicos), com parágrafos que contam a evolução do período.
 - NUNCA escreva frases como "trata-se de aluno com deficiência X" — o diagnóstico já está identificado em outro lugar do documento.
-- Ao falar de frequência, use termos qualitativos (ex: "frequência regular", "frequência irregular") em vez de listar datas específicas de falta. Faltas com atestado médico ou justificadas (ex: tratamento em CAPS) não devem ser tratadas como um problema de assiduidade — mencione-as apenas se relevante ao contexto do aluno, sem tom negativo.
+- Ao falar de frequência, use termos qualitativos (ex: "frequência regular", "frequência irregular") em vez de listar datas específicas de falta. Faltas com atestado médico ou justificadas (ex: tratamento em CAPS) não devem ser tratadas como um problema de assiduidade — mencione-as apenas se relevante ao contexto do aluno, sem tom negativo. Dias marcados como feriado, ponto facultativo ou conselho de classe NÃO são faltas do aluno — são dias sem aula para toda a escola — e não devem entrar na análise de frequência do(a) estudante de forma alguma.
 - Traga observações específicas e concretas dos registros reais, não generalidades.
 - Se houver evolução perceptível ao longo do período (comportamento, engajamento, autonomia, vínculo), narre essa evolução.
 ${temAnteriores ? '- Como há relatórios de períodos anteriores fornecidos acima, escreva o relatório com foco em EVOLUÇÃO: compare explicitamente o que mudou desde o(s) período(s) anterior(es) até agora, destacando avanços, retrocessos ou estabilidade em pontos específicos (comportamento, aprendizagem, autonomia, socialização).' : ''}
@@ -1019,9 +1033,10 @@ function parseRespostaComponentePEI(texto){
 function gerarRelatorioPedagogico(student, entries, bim, year){
   const [start,end] = bimestreRange(year, bim);
   const sorted = entries.slice().sort((a,b)=> a.data<b.data?-1:1);
-  const presentes = sorted.filter(e=>e.presente).length;
-  const faltas = sorted.filter(e=>!e.presente).length;
-  const totalDias = sorted.length;
+  const diasLetivos = sorted.filter(e=> e.presente || !['feriado','facultativo','conselho'].includes(e.tipoFalta));
+  const presentes = diasLetivos.filter(e=>e.presente).length;
+  const faltas = diasLetivos.filter(e=>!e.presente).length;
+  const totalDias = diasLetivos.length;
   const pctPresenca = totalDias? Math.round(presentes/totalDias*100) : 0;
   let real=0,parc=0,nao=0;
   sorted.forEach(e=>(e.atividades||[]).forEach(a=>{ if(a.status==='realizada') real++; else if(a.status==='parcial') parc++; else nao++; }));
@@ -2414,6 +2429,7 @@ function renderCalendar(entriesByDate){
     presente: { bg:'#1E8449', fg:'#FFFFFF' },
     justificada: { bg:'#F1C40F', fg:'#3D2B00' },
     faltou: { bg:'#C0392B', fg:'#FFFFFF' },
+    feriado: { bg:'#2563EB', fg:'#FFFFFF' },
   };
   return `
     <div class="calendar no-print">
@@ -2432,7 +2448,7 @@ function renderCalendar(entriesByDate){
             const isToday = iso===today;
             let statusKey = null;
             if(e){
-              statusKey = e.presente ? 'presente' : ((e.tipoFalta==='atestado'||e.tipoFalta==='justificada') ? 'justificada' : 'faltou');
+              statusKey = e.presente ? 'presente' : calBucketTipoFalta(e.tipoFalta);
             }
             const cor = statusKey ? coresStatus[statusKey] : null;
             const style = cor ? `background:${cor.bg}; color:${cor.fg}; font-weight:800;` : '';
@@ -2446,6 +2462,7 @@ function renderCalendar(entriesByDate){
         <span><span class="dot" style="background:${coresStatus.presente.bg};"></span>presente</span>
         <span><span class="dot" style="background:${coresStatus.justificada.bg};"></span>falta justificada</span>
         <span><span class="dot" style="background:${coresStatus.faltou.bg};"></span>faltou</span>
+        <span><span class="dot" style="background:${coresStatus.feriado.bg};"></span>feriado</span>
       </div>
     </div>
   `;
@@ -2462,7 +2479,7 @@ function renderEntryCard(e, canEdit){
           <button class="btn btn-danger" data-delete-entry="${e.id}">Excluir</button>
         </div>`:''}
       </div>
-      ${!e.presente ? `<div style="margin-top:8px;font-size:13.5px;color:#B23A2E;font-weight:600;">${e.tipoFalta==='atestado'?'Faltou — Atestado médico':(e.tipoFalta==='justificada'?'Faltou — Falta justificada':'Faltou — Não justificada')}${e.motivoFalta?` <span style="font-weight:400;">(${esc(e.motivoFalta)})</span>`:''}</div>` : `
+      ${!e.presente ? `<div style="margin-top:8px;font-size:13.5px;color:#B23A2E;font-weight:600;">Faltou — ${esc(labelTipoFalta(e.tipoFalta))}${e.motivoFalta?` <span style="font-weight:400;">(${esc(e.motivoFalta)})</span>`:''}</div>` : `
         <div style="display:flex; gap:18px; margin-top:8px; font-size:13.5px;">
           <span><strong style="color:var(--silver);">Chegada:</strong> ${esc(e.chegada)||'—'}</span>
           <span><strong style="color:var(--silver);">Saída:</strong> ${esc(e.saida)||'—'}</span>
@@ -2504,8 +2521,9 @@ function loadEntryThumbs(entries){
 
 function renderMonthlyReport(student, entries){
   const sorted = entries.slice().sort((a,b)=> a.data<b.data?-1:1);
-  const presentes = sorted.filter(e=>e.presente).length;
-  const faltas = sorted.filter(e=>!e.presente).length;
+  const diasLetivos = sorted.filter(e=> e.presente || !['feriado','facultativo','conselho'].includes(e.tipoFalta));
+  const presentes = diasLetivos.filter(e=>e.presente).length;
+  const faltas = diasLetivos.filter(e=>!e.presente).length;
   let real=0,parc=0,nao=0;
   sorted.forEach(e=>(e.atividades||[]).forEach(a=>{ if(a.status==='realizada') real++; else if(a.status==='parcial') parc++; else nao++; }));
   const totalAt = real+parc+nao;
@@ -2551,7 +2569,7 @@ function renderMonthlyReport(student, entries){
         ${sorted.map(e=>`
           <div class="entry-card" style="border-left:3px solid #C9A227; padding-left:14px;">
             <div class="serif" style="font-size:14px;color:#B8860B;font-weight:700;">${fmtDateBR(e.data)} <span style="font-size:11.5px;color:var(--dim);font-weight:400;text-transform:capitalize;">— ${weekdayBR(e.data)}</span></div>
-            ${!e.presente ? `<div style="font-size:13px;color:#B23A2E;margin-top:3px;">${e.tipoFalta==='atestado'?'Faltou — Atestado':(e.tipoFalta==='justificada'?'Faltou — Justificada':'Faltou')}</div>` : `
+            ${!e.presente ? `<div style="font-size:13px;color:#B23A2E;margin-top:3px;">Faltou — ${esc(labelTipoFalta(e.tipoFalta))}</div>` : `
               <div style="font-size:12.5px;color:var(--dim);margin-top:3px;">Chegada ${esc(e.chegada)||'—'} · Saída ${esc(e.saida)||'—'}</div>
               ${(e.atividades||[]).length>0 ? `<div style="font-size:12.5px;margin-top:4px;">${e.atividades.map(a=>`${a.horario?esc(a.horario)+' — ':''}${esc(a.descricao)||'atividade'} (${STATUS[a.status]?.label})`).join('; ')}</div>` : ''}
             `}
@@ -4207,6 +4225,9 @@ function openEntryModal(existing, defaultDate, student){
                 <option value="" ${!f.tipoFalta?'selected':''}>Não justificada</option>
                 <option value="atestado" ${f.tipoFalta==='atestado'?'selected':''}>Atestado médico</option>
                 <option value="justificada" ${f.tipoFalta==='justificada'?'selected':''}>Falta justificada (ex: CAPS, terapia)</option>
+                <option value="feriado" ${f.tipoFalta==='feriado'?'selected':''}>Feriado</option>
+                <option value="facultativo" ${f.tipoFalta==='facultativo'?'selected':''}>Ponto facultativo</option>
+                <option value="conselho" ${f.tipoFalta==='conselho'?'selected':''}>Conselho de classe</option>
               </select>
             </label>
             <label class="field full" style="grid-column:span 2;"><span>Motivo / observação</span><input id="f-motivo-falta" value="${esc(f.motivoFalta||'')}" placeholder="Ex: Tratamento no CAPS em horário de aula"></label>
