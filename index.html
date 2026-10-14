@@ -223,12 +223,17 @@
 <div id="root"></div>
 <div id="modal-root"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
 /* ============ generic helpers ============ */
+if(typeof pdfjsLib !== 'undefined'){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 const pad2 = n => String(n).padStart(2,'0');
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -407,12 +412,47 @@ function getBimestre(dateObj){
   if(m<=3) return 1; if(m<=6) return 2; if(m<=9) return 3; return 4;
 }
 function bimestreRange(year, bim){
+  const custom = appData && appData.calendarioBimestres && appData.calendarioBimestres[year] && appData.calendarioBimestres[year][bim-1];
+  if(custom && custom[0] && custom[1]) return custom;
   const ranges=[[1,3],[4,6],[7,9],[10,12]];
   const [m0,m1]=ranges[bim-1];
   const start=`${year}-${pad2(m0)}-01`;
   const endDay=new Date(year,m1,0).getDate();
   const end=`${year}-${pad2(m1)}-${pad2(endDay)}`;
   return [start,end];
+}
+function renderCalendarioBimestresCard(){
+  const anoAtual = new Date().getFullYear();
+  const anoSelecionado = uiState.calBimAnoEdit || anoAtual;
+  return `
+    <div class="card" style="margin-bottom:20px;">
+      <div class="tab-badge">Calendário escolar</div>
+      <div class="serif" style="font-size:18px;font-weight:700;color:#B8860B;margin:8px 0 6px;">📅 Datas reais de cada bimestre</div>
+      <div style="font-size:12px; color:var(--dim); margin-bottom:12px;">Por padrão, o sistema divide o ano em trimestres de calendário (jan-mar, abr-jun...). Se o calendário oficial da escola for diferente, ajuste as datas reais aqui — isso corrige os relatórios pedagógicos e o calendário do aluno para o ano escolhido.</div>
+      <label class="field" style="max-width:160px; margin-bottom:14px;"><span>Ano</span>
+        <select id="cal-bim-ano-select">
+          ${[anoAtual-1, anoAtual, anoAtual+1].map(y=>`<option value="${y}" ${y===anoSelecionado?'selected':''}>${y}</option>`).join('')}
+        </select>
+      </label>
+      <div class="grid2">
+        ${[1,2,3,4].map(b=>{
+          const [defStart, defEnd] = bimestreRange(anoSelecionado, b);
+          return `
+            <div>
+              <div class="label-mini" style="margin-bottom:4px;">${b}º Bimestre</div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="date" id="cal-bim-${b}-start" value="${defStart}">
+                <span style="color:var(--dim);">até</span>
+                <input type="date" id="cal-bim-${b}-end" value="${defEnd}">
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <button class="btn btn-gold" id="btn-save-calendario-bimestres" style="margin-top:14px;">Salvar calendário de ${anoSelecionado}</button>
+      <div id="cal-bim-saved-msg" style="display:none; margin-top:8px; font-size:12.5px; color:#3F7D45;">✅ Calendário salvo.</div>
+    </div>
+  `;
 }
 function freqLabel(pct){
   if(pct>=90) return 'assídua e regular, evidenciando comprometimento com sua rotina escolar';
@@ -949,8 +989,9 @@ INSTRUÇÕES:
 - Escreva um relatório corrido (não uma lista de tópicos), com parágrafos que contam a evolução do período.
 - NUNCA escreva frases como "trata-se de aluno com deficiência X" — o diagnóstico já está identificado em outro lugar do documento.
 - Ao falar de frequência, use termos qualitativos (ex: "frequência regular", "frequência irregular") em vez de listar datas específicas de falta. Faltas com atestado médico ou justificadas (ex: tratamento em CAPS) não devem ser tratadas como um problema de assiduidade — mencione-as apenas se relevante ao contexto do aluno, sem tom negativo. Dias marcados como feriado, ponto facultativo ou conselho de classe NÃO são faltas do aluno — são dias sem aula para toda a escola — e não devem entrar na análise de frequência do(a) estudante de forma alguma.
-- Traga observações específicas e concretas dos registros reais, não generalidades.
-- Se houver evolução perceptível ao longo do período (comportamento, engajamento, autonomia, vínculo), narre essa evolução.
+- Traga observações específicas e concretas dos registros reais (comportamentos, situações, reações do aluno) — nunca generalidades vagas tipo "o aluno apresentou bom desenvolvimento". Seja concreto sobre O QUE aconteceu, sem precisar dizer QUANDO.
+- NUNCA cite datas específicas de eventos pontuais no texto corrido (nunca escreva frases como "no dia 25 de julho o aluno teve uma crise" ou "em 12/08 apresentou agitação"). Em vez disso, sintetize os eventos do período em termos de frequência/padrão: "em algumas ocasiões", "por vezes", "em momentos de maior agitação no intervalo", "ao longo do bimestre", "principalmente nas atividades em grupo". A única exceção é a data de início/fim do próprio período, que já aparece no cabeçalho do relatório.
+- Se houver evolução perceptível ao longo do período (comportamento, engajamento, autonomia, vínculo), narre essa evolução sem recorrer a datas pontuais.
 ${temAnteriores ? '- Como há relatórios de períodos anteriores fornecidos acima, escreva o relatório com foco em EVOLUÇÃO: compare explicitamente o que mudou desde o(s) período(s) anterior(es) até agora, destacando avanços, retrocessos ou estabilidade em pontos específicos (comportamento, aprendizagem, autonomia, socialização).' : ''}
 - Termine com considerações finais e recomendações objetivas para o próximo período.
 - Português do Brasil, tom profissional pedagógico, texto corrido em parágrafos, sem markdown, sem títulos numerados.
@@ -1468,6 +1509,7 @@ function migrateAppData(){
   if(!appData.notificacoes) appData.notificacoes = [];
   if(!appData.mensagensSuporte) appData.mensagensSuporte = [];
   if(!appData.mensagensGestor) appData.mensagensGestor = [];
+  if(!appData.calendarioBimestres) appData.calendarioBimestres = { 2026: [null, null, ['2026-07-22','2026-10-02'], null] };
   if(!appData.iaConfig) appData.iaConfig = {provider:'claude', geminiKey:'', groqKey:'', anthropicKey:''};
   if(!appData.escolas || appData.escolas.length===0){
     appData.escolas = [
@@ -2650,7 +2692,7 @@ function renderPedagogicoReport(student){
 
       <div class="no-print" style="margin:22px 0; border:1px solid var(--border-soft); border-radius:10px; padding:16px 18px; background:var(--panel-alt);">
         <div class="label-mini" style="color:#B8860B; margin-bottom:8px;">📎 Relatórios anteriores deste aluno (opcional)</div>
-        <div style="font-size:12px; color:var(--dim); margin-bottom:12px;">Cole ou envie o texto de pareceres/relatórios anteriores. A IA vai usá-los como base para escrever a <strong>evolução</strong> do aluno, comparando com os registros deste período.</div>
+        <div style="font-size:12px; color:var(--dim); margin-bottom:12px;">Cole o texto ou envie um arquivo (.txt, .pdf ou .docx) de pareceres/relatórios anteriores. A IA vai usá-los como base para escrever a <strong>evolução</strong> do aluno, comparando com os registros deste período.</div>
         <div id="relatorios-anteriores-lista" style="display:flex; flex-direction:column; gap:8px; margin-bottom:12px;">
           ${(student.relatoriosAnteriores||[]).length===0 ? `<div style="font-size:12.5px; color:var(--dim); font-style:italic;">Nenhum relatório anterior cadastrado ainda.</div>` : (student.relatoriosAnteriores||[]).map(r=>`
             <div style="display:flex; justify-content:space-between; align-items:center; background:var(--panel); border:1px solid var(--border-soft); border-radius:7px; padding:8px 10px;">
@@ -2662,7 +2704,7 @@ function renderPedagogicoReport(student){
         <div class="grid3">
           <label class="field"><span>Título</span><input id="f-rel-titulo" placeholder="Ex: Parecer 1º Bimestre 2026"></label>
           <label class="field"><span>Data</span><input type="date" id="f-rel-data" value="${todayISO()}"></label>
-          <label class="field"><span>Anexar arquivo .txt (opcional)</span><input type="file" id="f-rel-arquivo" accept=".txt"></label>
+          <label class="field"><span>Anexar arquivo .txt, .pdf ou .docx (opcional)</span><input type="file" id="f-rel-arquivo" accept=".txt,.pdf,.docx"></label>
         </div>
         <label class="field" style="margin-top:10px;"><span>Texto do relatório</span><textarea id="f-rel-texto" rows="4" placeholder="Cole aqui o texto do relatório/parecer anterior..."></textarea></label>
         <button class="btn btn-gold" id="btn-add-relatorio-anterior" style="margin-top:10px;">+ Adicionar relatório anterior</button>
@@ -3124,6 +3166,8 @@ function renderUserManagement(){
         <button class="btn btn-gold" id="btn-save-ia-config" style="margin-top:14px;">Salvar configuração de IA</button>
         <div id="ia-config-saved-msg" style="display:none; margin-top:8px; font-size:12.5px; color:#3F7D45;">✅ Configuração salva neste aparelho.</div>
       </div>
+
+      ${renderCalendarioBimestresCard()}
 
       <div class="card">
         <div class="tab-badge">Gerenciar usuários</div>
@@ -3659,6 +3703,22 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('user-escola-filter')?.addEventListener('change', (e)=>{
     uiState.userEscolaFiltro = e.target.value; renderApp();
   });
+  document.getElementById('cal-bim-ano-select')?.addEventListener('change', (e)=>{
+    uiState.calBimAnoEdit = Number(e.target.value); renderApp();
+  });
+  document.getElementById('btn-save-calendario-bimestres')?.addEventListener('click', async ()=>{
+    const ano = uiState.calBimAnoEdit || new Date().getFullYear();
+    const novo = [1,2,3,4].map(b=>{
+      const start = document.getElementById(`cal-bim-${b}-start`).value;
+      const end = document.getElementById(`cal-bim-${b}-end`).value;
+      return (start && end) ? [start, end] : null;
+    });
+    if(!appData.calendarioBimestres) appData.calendarioBimestres = {};
+    appData.calendarioBimestres[ano] = novo;
+    await persistImmediate();
+    const msg = document.getElementById('cal-bim-saved-msg');
+    if(msg){ msg.style.display = 'block'; setTimeout(()=>{ msg.style.display = 'none'; }, 3000); }
+  });
   wirePwToggles();
   document.getElementById('btn-save-ia-config')?.addEventListener('click', async ()=>{
     setIAProvider(document.getElementById('ia-provider-select').value);
@@ -3952,12 +4012,40 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('btn-print-report')?.addEventListener('click', ()=> window.print());
   document.getElementById('btn-print-pedagogico')?.addEventListener('click', ()=> window.print());
 
-  document.getElementById('f-rel-arquivo')?.addEventListener('change', (e)=>{
+  document.getElementById('f-rel-arquivo')?.addEventListener('change', async (e)=>{
     const file = e.target.files[0];
     if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev)=>{ document.getElementById('f-rel-texto').value = ev.target.result; };
-    reader.readAsText(file, 'UTF-8');
+    const textarea = document.getElementById('f-rel-texto');
+    const nome = file.name.toLowerCase();
+    textarea.value = 'Lendo arquivo…';
+    try{
+      if(nome.endsWith('.txt')){
+        const texto = await file.text();
+        textarea.value = texto;
+      } else if(nome.endsWith('.pdf')){
+        if(typeof pdfjsLib === 'undefined') throw new Error('Leitor de PDF não carregou. Verifique sua conexão e tente novamente.');
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        let texto = '';
+        for(let i=1; i<=pdf.numPages; i++){
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          texto += content.items.map(it=>it.str).join(' ') + '\n\n';
+        }
+        textarea.value = texto.trim() || '(Não foi possível extrair texto deste PDF — ele pode ser uma imagem escaneada. Cole o texto manualmente.)';
+      } else if(nome.endsWith('.docx')){
+        if(typeof mammoth === 'undefined') throw new Error('Leitor de Word não carregou. Verifique sua conexão e tente novamente.');
+        const buf = await file.arrayBuffer();
+        const resultado = await mammoth.extractRawText({ arrayBuffer: buf });
+        textarea.value = resultado.value.trim();
+      } else {
+        textarea.value = '';
+        alert('Formato não suportado. Envie um arquivo .txt, .pdf ou .docx.');
+      }
+    }catch(err){
+      textarea.value = '';
+      alert('Não foi possível ler o arquivo: ' + (err.message||'erro desconhecido'));
+    }
   });
 
   document.getElementById('btn-add-relatorio-anterior')?.addEventListener('click', async ()=>{
