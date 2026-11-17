@@ -259,6 +259,22 @@ const TIPO_FALTA_INFO = {
   facultativo: { label:'Ponto facultativo', calBucket:'justificada' },
   conselho: { label:'Conselho de classe', calBucket:'justificada' },
 };
+function cidRowHTML(valor, rid){
+  return `<div class="cid-row" data-cid-rid="${rid}" style="border:1px solid var(--border-soft); border-radius:8px; padding:10px;">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input class="cid-row-input" data-cid-input value="${esc(valor)}" placeholder="Digite ou escolha, ex: F84.0" list="cid-list-datalist" autocomplete="off" style="flex:1;">
+      <button type="button" class="btn btn-danger" data-remove-cid style="padding:4px 9px; font-size:11px; flex-shrink:0;">Remover</button>
+    </div>
+    <div class="cid-desc-wrap" data-cid-desc-wrap style="display:${valor?'block':'none'}; margin-top:8px;">
+      <div style="font-size:12.5px; color:var(--dim); background:var(--panel-alt); border:1px solid var(--border-soft); border-radius:7px; padding:8px 10px;" data-cid-desc-text></div>
+    </div>
+  </div>`;
+}
+const RECREIO_LABELS = {
+  participacao: { ativa:'Participou ativamente das brincadeiras', pouca:'Participou pouco', nao:'Não participou', isolado:'Ficou isolado(a)' },
+  interacao: { colegas:'Interagiu com os colegas', adulto:'Interagiu apenas com adultos', nao:'Não interagiu', conflito:'Teve interações conflituosas' },
+};
+function labelRecreio(campo, valor){ return (RECREIO_LABELS[campo] && RECREIO_LABELS[campo][valor]) || valor || ''; }
 function labelTipoFalta(tipo){
   return (TIPO_FALTA_INFO[tipo||''] || TIPO_FALTA_INFO['']).label;
 }
@@ -960,6 +976,13 @@ function montarPromptRelatorioPedagogico(student, entries, bim, ano, periodoStar
       if(e.locomocao) cuidados.push('Locomoção: ' + labelCuidado('locomocao', e.locomocao));
       linha += ' ' + cuidados.join('. ') + '.';
     }
+    if(e.recreioParticipacao||e.recreioInteracao||e.recreioInicio){
+      const rec = [];
+      if(e.recreioInicio||e.recreioFim) rec.push(`horário ${e.recreioInicio||'-'} às ${e.recreioFim||'-'}`);
+      if(e.recreioParticipacao) rec.push(labelRecreio('participacao', e.recreioParticipacao));
+      if(e.recreioInteracao) rec.push(labelRecreio('interacao', e.recreioInteracao));
+      linha += ' Recreio: ' + rec.join('; ') + '.';
+    }
     if(e.atividades && e.atividades.length){
       linha += ' Atividades: ' + e.atividades.map(a=>`${a.descricao||'atividade'} (${STATUS[a.status]?.label})`).join('; ') + '.';
     }
@@ -979,7 +1002,7 @@ DADOS DO ALUNO:
 Nome: ${student.nome}
 Série/turma: ${student.serie||'-'}
 Escola: ${student.escola||'-'}
-CID: ${student.cid||'não informado'}
+CID: ${(student.cids&&student.cids.length)?student.cids.join(', '):'não informado'}
 Período: ${bim}º Bimestre de ${ano} (${fmtDateBR(periodoStart)} a ${fmtDateBR(periodoEnd)})
 
 REGISTROS DO CADERNO DE CAMPO NO PERÍODO (use estes registros reais como base — não invente informações que não estejam aqui):
@@ -1089,8 +1112,8 @@ function gerarRelatorioPedagogico(student, entries, bim, year){
   let texto = '';
   texto += `Durante o ${bim}º bimestre de ${year}, referente ao período de ${fmtDateBR(start)} a ${fmtDateBR(end)}, o(a) aluno(a) ${student.nome}${student.serie?`, da turma ${student.serie}`:''}${student.escola?`, da ${student.escola}`:''}, foi acompanhado(a) individualmente em suas atividades de rotina escolar, com registros sistemáticos em caderno de campo pedagógico.\n\n`;
 
-  const cidTxt = cidContext(student.cid);
-  if(cidTxt){ texto += `${cidTxt}\n\n`; }
+  const cidTxts = [...new Set((student.cids||[]).map(x=>cidContext(x)).filter(Boolean))];
+  if(cidTxts.length){ texto += `${cidTxts.join(' ')}\n\n`; }
 
   if(totalDias>0){
     texto += `Quanto à frequência escolar, foram registrados ${totalDias} dia(s) de acompanhamento no período, totalizando ${presentes} presença(s) e ${faltas} falta(s) (${pctPresenca}% de frequência). O(A) aluno(a) apresentou frequência ${freqLabel(pctPresenca)}.\n\n`;
@@ -1510,6 +1533,7 @@ function migrateAppData(){
   if(!appData.mensagensSuporte) appData.mensagensSuporte = [];
   if(!appData.mensagensGestor) appData.mensagensGestor = [];
   if(!appData.calendarioBimestres) appData.calendarioBimestres = { 2026: [null, null, ['2026-07-22','2026-10-02'], null] };
+  (appData.students||[]).forEach(s=>{ if(!Array.isArray(s.cids)) s.cids = s.cid ? [s.cid] : []; });
   if(!appData.iaConfig) appData.iaConfig = {provider:'claude', geminiKey:'', groqKey:'', anthropicKey:''};
   if(!appData.escolas || appData.escolas.length===0){
     appData.escolas = [
@@ -2321,6 +2345,16 @@ function renderMainApp_root(){
   const filtered = escolaFiltrada.filter(s => s.nome.toLowerCase().includes(uiState.search.toLowerCase()));
   const bimAtual = getBimestre(new Date());
 
+  let lembreteHTML = '';
+  if(user.role==='professor' && !uiState.lembreteFechado){
+    const hoje = todayISO();
+    const semRegistroHoje = escopoStudents.filter(s=> !(appData.entries[s.id]||[]).some(e=>e.data===hoje));
+    if(semRegistroHoje.length>0){
+      const nomes = semRegistroHoje.slice(0,3).map(s=>s.nome).join(', ') + (semRegistroHoje.length>3?` e mais ${semRegistroHoje.length-3}`:'');
+      lembreteHTML = `<div class="no-print" style="background:#FBF1DA; border:1px solid #E9D9A8; color:#6B4A00; border-radius:8px; padding:10px 14px; margin:12px 16px 0; display:flex; justify-content:space-between; align-items:center; gap:10px;"><span style="font-size:12.5px;">⏰ <strong>Lembrete:</strong> você ainda não registrou hoje (${fmtDateBR(hoje)}) para: ${esc(nomes)}.</span><button class="btn" id="btn-fechar-lembrete" style="padding:4px 10px; font-size:11px; flex-shrink:0;">✕</button></div>`;
+    }
+  }
+
   root.innerHTML = `
     <div class="app-shell">
       <div class="sidebar-backdrop no-print ${uiState.sidebarOpen?'show':''}" id="sidebar-backdrop"></div>
@@ -2373,6 +2407,7 @@ function renderMainApp_root(){
             <button class="btn" id="btn-logout">Sair</button>
           </div>
         </div>
+        ${lembreteHTML}
         ${uiState.view==='usuarios' && isDev ? renderUserManagement() : uiState.view==='escolas' && isDev ? renderEscolasManagement() : (
           !selected ? `
             <div class="empty-state">
@@ -2417,7 +2452,7 @@ function renderMainPanel(selected, canEdit, isDev){
         <div style="display:grid; grid-template-columns:repeat(4,auto); gap:6px 28px; margin-top:12px; font-size:13.5px;">
           <div><div class="label-mini">Série / turma</div><div>${esc(selected.serie)||'—'}</div></div>
           <div><div class="label-mini">Escola</div><div>${esc(selected.escola)||'—'}</div></div>
-          <div><div class="label-mini">CID</div><div>${esc(selected.cid)||'—'}</div></div>
+          <div><div class="label-mini">CID</div><div>${esc((selected.cids&&selected.cids.length)?selected.cids.join(', '):'')||'—'}</div></div>
           <div><div class="label-mini">Horário de estudo</div><div>${esc(selected.horarioEstudo)||'—'}</div></div>
         </div>
         ${selected.responsavel ? `<div style="margin-top:10px;font-size:12.5px;color:var(--dim);">Acompanhamento: ${esc(selected.responsavel)}</div>` : ''}
@@ -2533,6 +2568,13 @@ function renderEntryCard(e, canEdit){
             ${e.locomocao?`<span><strong style="color:var(--silver);">Locomoção:</strong> ${esc(labelCuidado('locomocao', e.locomocao))}</span>`:''}
           </div>
         `:''}
+        ${(e.recreioInicio||e.recreioFim||e.recreioParticipacao||e.recreioInteracao) ? `
+          <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:12.5px;">
+            ${(e.recreioInicio||e.recreioFim)?`<span><strong style="color:var(--silver);">Recreio:</strong> ${esc(e.recreioInicio||'—')} às ${esc(e.recreioFim||'—')}</span>`:''}
+            ${e.recreioParticipacao?`<span><strong style="color:var(--silver);">Participação:</strong> ${esc(labelRecreio('participacao', e.recreioParticipacao))}</span>`:''}
+            ${e.recreioInteracao?`<span><strong style="color:var(--silver);">Interação:</strong> ${esc(labelRecreio('interacao', e.recreioInteracao))}</span>`:''}
+          </div>
+        `:''}
         ${(e.atividades&&e.atividades.length>0) ? `
           <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px;">
             ${e.atividades.map(a=>{
@@ -2595,7 +2637,7 @@ function renderMonthlyReport(student, entries){
         <div><div class="label-mini">Aluno</div><div>${esc(student.nome)}</div></div>
         <div><div class="label-mini">Série / turma</div><div>${esc(student.serie)||'—'}</div></div>
         <div><div class="label-mini">Escola</div><div>${esc(student.escola)||'—'}</div></div>
-        <div><div class="label-mini">CID</div><div>${esc(student.cid)||'—'}</div></div>
+        <div><div class="label-mini">CID</div><div>${esc((student.cids&&student.cids.length)?student.cids.join(', '):'')||'—'}</div></div>
       </div>
       <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:22px;">
         ${[['Dias registrados',sorted.length],['Presenças',presentes],['Faltas',faltas],[`Ativ. realizadas`,`${real} (${pct(real)}%)`],[`Ativ. não realizadas`,`${nao} (${pct(nao)}%)`]].map(([label,val])=>`
@@ -2678,7 +2720,7 @@ function renderPedagogicoReport(student){
         <div><div class="label-mini">Aluno</div><div>${esc(student.nome)}</div></div>
         <div><div class="label-mini">Série / turma</div><div>${esc(student.serie)||'—'}</div></div>
         <div><div class="label-mini">Escola</div><div>${esc(student.escola)||'—'}</div></div>
-        <div><div class="label-mini">CID</div><div>${esc(student.cid)||'—'}</div></div>
+        <div><div class="label-mini">CID</div><div>${esc((student.cids&&student.cids.length)?student.cids.join(', '):'')||'—'}</div></div>
       </div>
 
       <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:22px;">
@@ -2743,7 +2785,7 @@ function renderPEI(student){
     modelo:'municipal', segmento:'fund1', componente:'todas', periodicidade:'bimestral',
     ano:(new Date()).getFullYear(), bim:getBimestre(new Date()),
     dataInicio: todayISO(),
-    cids: student.cid ? [student.cid.trim().toUpperCase()] : [],
+    cids: (student.cids||[]).map(x=>x.trim().toUpperCase()).filter(Boolean),
     cidCustom:'', potencialidades:'', dificuldades:'',
   };
   uiState.peiForm = f;
@@ -3599,6 +3641,7 @@ function wireAppListeners(selected, canEdit, isDev){
   document.getElementById('btn-mensagens-gestor')?.addEventListener('click', ()=> openMensagensGestorModal());
 
   document.getElementById('btn-notificacoes')?.addEventListener('click', ()=> openNotificacoesModal());
+  document.getElementById('btn-fechar-lembrete')?.addEventListener('click', ()=>{ uiState.lembreteFechado = true; renderApp(); });
 
   document.getElementById('btn-logout')?.addEventListener('click', ()=>{
     if(auth) signOut(auth).catch(()=>{});
@@ -4163,7 +4206,8 @@ function wireAppListeners(selected, canEdit, isDev){
 function openStudentModal(existing){
   const mr = document.getElementById('modal-root');
   const defaultEscola = currentUser() && currentUser().escola ? currentUser().escola : '';
-  const f = existing || {nome:'',serie:'',cid:'',horarioEstudo:'',escola:defaultEscola,responsavel:''};
+  const f = existing || {nome:'',serie:'',cids:[],horarioEstudo:'',escola:defaultEscola,responsavel:''};
+  const cidsIniciais = (f.cids && f.cids.length) ? f.cids : [''];
   const escolas = [...new Set(appData.escolas.map(e=>e.nome).concat(appData.students.map(s=>s.escola)).filter(Boolean))];
   let pendingPhoto = null; // dataURL if user picked a new photo this session
   let removePhoto = false;
@@ -4185,11 +4229,15 @@ function openStudentModal(existing){
           <label class="field"><span>Série / turma</span><input id="f-serie" value="${esc(f.serie)}" placeholder="Ex: 5º Ano H"></label>
           <label class="field"><span>Escola</span><input id="f-escola" value="${esc(f.escola)}" placeholder="Ex: E.E.C.M. Joaquim Nunes Rocha" list="escolas-list"></label>
           <datalist id="escolas-list">${escolas.map(e=>`<option value="${esc(e)}">`).join('')}</datalist>
-          <label class="field full"><span>CID</span><input id="f-cid" value="${esc(f.cid)}" placeholder="Digite ou escolha, ex: F84.0" list="cid-list-datalist" autocomplete="off"></label>
           <datalist id="cid-list-datalist">${CID_LIST.map(c=>`<option value="${esc(c.codigo)}">${esc(c.codigo)} — ${esc(c.legenda)}</option>`).join('')}</datalist>
-          <div class="field full" id="cid-desc-wrap" style="display:${f.cid?'block':'none'}; margin-top:-8px;">
-            <div class="label-mini">Descrição do CID</div>
-            <div id="cid-desc-text" style="font-size:12.5px; color:var(--dim); background:var(--panel-alt); border:1px solid var(--border-soft); border-radius:8px; padding:8px 10px; margin-top:4px;"></div>
+          <div class="field full">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span>CID(s)</span>
+              <button type="button" class="btn" id="btn-add-cid" style="padding:4px 10px; font-size:11.5px;">+ Adicionar CID</button>
+            </div>
+            <div id="cids-container" style="margin-top:8px; display:flex; flex-direction:column; gap:10px;">
+              ${cidsIniciais.map(x=>cidRowHTML(x, uid())).join('')}
+            </div>
           </div>
           <label class="field"><span>Horário de estudo</span><input id="f-horario" value="${esc(f.horarioEstudo)}" placeholder="Ex: Vespertino, 13h–17h"></label>
           <label class="field full"><span>Responsável pelo acompanhamento</span><input id="f-resp" value="${esc(f.responsavel)}" placeholder="Ex: Assistente de Educação Especial"></label>
@@ -4205,20 +4253,24 @@ function openStudentModal(existing){
   document.getElementById('btn-cancel-student').addEventListener('click', close);
   document.getElementById('ov-student').addEventListener('click', (e)=>{ if(e.target.id==='ov-student') close(); });
 
-  const cidInput = document.getElementById('f-cid');
-  const cidDescWrap = document.getElementById('cid-desc-wrap');
-  const cidDescText = document.getElementById('cid-desc-text');
-  const updateCidDesc = ()=>{
-    const val = (cidInput.value||'').trim();
-    if(!val){ cidDescWrap.style.display='none'; return; }
+  const cidsContainer = document.getElementById('cids-container');
+  const updateCidDescFor = (rowEl)=>{
+    const input = rowEl.querySelector('[data-cid-input]');
+    const descWrap = rowEl.querySelector('[data-cid-desc-wrap]');
+    const descText = rowEl.querySelector('[data-cid-desc-text]');
+    const val = (input.value||'').trim();
+    if(!val){ descWrap.style.display='none'; return; }
     const found = CID_LIST.find(c=>c.codigo.toUpperCase()===val.toUpperCase());
-    const desc = (found?`${found.legenda}. `:'') + cidContext(val);
-    cidDescText.textContent = desc;
-    cidDescWrap.style.display = 'block';
+    descText.textContent = (found?`${found.legenda}. `:'') + cidContext(val);
+    descWrap.style.display = 'block';
   };
-  cidInput.addEventListener('input', updateCidDesc);
-  cidInput.addEventListener('change', updateCidDesc);
-  updateCidDesc();
+  cidsContainer.querySelectorAll('.cid-row').forEach(row=> updateCidDescFor(row));
+  cidsContainer.addEventListener('input', (e)=>{ if(e.target.matches('[data-cid-input]')) updateCidDescFor(e.target.closest('.cid-row')); });
+  cidsContainer.addEventListener('change', (e)=>{ if(e.target.matches('[data-cid-input]')) updateCidDescFor(e.target.closest('.cid-row')); });
+  cidsContainer.addEventListener('click', (e)=>{ const b = e.target.closest('[data-remove-cid]'); if(b) b.closest('.cid-row').remove(); });
+  document.getElementById('btn-add-cid').addEventListener('click', ()=>{
+    const w = document.createElement('div'); w.innerHTML = cidRowHTML('', uid()); cidsContainer.appendChild(w.firstElementChild);
+  });
 
   const previewWrap = document.getElementById('photo-preview-wrap');
   const removeBtn = document.getElementById('btn-remove-photo');
@@ -4249,7 +4301,7 @@ function openStudentModal(existing){
       id: existing?existing.id:uid(),
       nome, serie: document.getElementById('f-serie').value,
       escola: document.getElementById('f-escola').value,
-      cid: document.getElementById('f-cid').value,
+      cids: [...new Set(Array.from(document.querySelectorAll('#cids-container [data-cid-input]')).map(el=>el.value.trim()).filter(Boolean))],
       horarioEstudo: document.getElementById('f-horario').value,
       responsavel: document.getElementById('f-resp').value,
       hasPhoto: existing ? (removePhoto ? false : (pendingPhoto ? true : !!existing.hasPhoto)) : !!pendingPhoto,
@@ -4290,12 +4342,17 @@ function activityRowHTML(a){
 
 function openEntryModal(existing, defaultDate, student){
   const mr = document.getElementById('modal-root');
-  const f = existing ? JSON.parse(JSON.stringify(existing)) : { data: defaultDate||todayISO(), presente:true, chegada:'', saida:'', atividades:[], desenvolvimento:'', tipoFalta:'', motivoFalta:'', alimentacao:'', higienizacao:'', locomocao:'' };
+  const dataNovo = defaultDate||todayISO();
+  const anteriorPresente = existing ? null : (appData.entries[student.id]||[]).filter(x=> x.presente && x.data < dataNovo).sort((a,b)=> a.data<b.data?1:-1)[0] || null;
+  const f = existing ? JSON.parse(JSON.stringify(existing)) : (anteriorPresente
+    ? { ...JSON.parse(JSON.stringify(anteriorPresente)), data: dataNovo, presente:true, tipoFalta:'', motivoFalta:'' }
+    : { data: dataNovo, presente:true, chegada:'', saida:'', atividades:[], desenvolvimento:'', tipoFalta:'', motivoFalta:'', alimentacao:'', higienizacao:'', locomocao:'' });
 
   mr.innerHTML = `
     <div class="overlay" id="ov-entry">
       <div class="modal" style="max-width:640px;">
         <h3 class="serif">${existing?'Editar registro do dia':'Novo registro do dia'} — ${esc(student.nome)}</h3>
+        ${anteriorPresente?`<div style="font-size:12px; background:#FBF1DA; border:1px solid #E9D9A8; color:#6B4A00; border-radius:7px; padding:8px 10px; margin-bottom:10px;">Preenchido com as informações do último dia registrado (${fmtDateBR(anteriorPresente.data)}). Revise e ajuste antes de salvar.</div>`:''}
         <div class="grid3">
           <label class="field"><span>Data</span><input type="date" id="f-data" value="${f.data}"></label>
           <label class="field"><span>Presença</span>
@@ -4334,6 +4391,29 @@ function openEntryModal(existing, defaultDate, student){
             </div>
             <div id="activities-container" style="margin-top:10px;">
               ${f.atividades.length===0?'<div id="no-activities" style="font-size:13px;color:var(--dim);font-style:italic;">Nenhuma atividade adicionada ainda.</div>':f.atividades.map(activityRowHTML).join('')}
+            </div>
+          </div>
+          <div style="margin-top:20px;">
+            <span class="label-mini" style="color:#B8860B;">Recreio</span>
+            <div class="grid3" style="margin-top:10px;">
+              <label class="field"><span>Início do recreio</span><input type="time" id="f-recreio-inicio" value="${esc(f.recreioInicio||'')}"></label>
+              <label class="field"><span>Fim do recreio</span><input type="time" id="f-recreio-fim" value="${esc(f.recreioFim||'')}"></label>
+              <div></div>
+            </div>
+            <div class="grid3" style="margin-top:10px;">
+              <label class="field"><span>Participação</span>
+                <select id="f-recreio-participacao">
+                  <option value="" ${!f.recreioParticipacao?'selected':''}>Não registrado</option>
+                  ${Object.entries(RECREIO_LABELS.participacao).map(([k,v])=>`<option value="${k}" ${f.recreioParticipacao===k?'selected':''}>${v}</option>`).join('')}
+                </select>
+              </label>
+              <label class="field"><span>Interação</span>
+                <select id="f-recreio-interacao">
+                  <option value="" ${!f.recreioInteracao?'selected':''}>Não registrado</option>
+                  ${Object.entries(RECREIO_LABELS.interacao).map(([k,v])=>`<option value="${k}" ${f.recreioInteracao===k?'selected':''}>${v}</option>`).join('')}
+                </select>
+              </label>
+              <div></div>
             </div>
           </div>
           <div style="margin-top:20px;">
@@ -4482,6 +4562,10 @@ function openEntryModal(existing, defaultDate, student){
       alimentacao: presente ? document.getElementById('f-alimentacao').value : '',
       higienizacao: presente ? document.getElementById('f-higienizacao').value : '',
       locomocao: presente ? document.getElementById('f-locomocao').value : '',
+      recreioInicio: presente ? document.getElementById('f-recreio-inicio').value : '',
+      recreioFim: presente ? document.getElementById('f-recreio-fim').value : '',
+      recreioParticipacao: presente ? document.getElementById('f-recreio-participacao').value : '',
+      recreioInteracao: presente ? document.getElementById('f-recreio-interacao').value : '',
       desenvolvimento: document.getElementById('f-dev').value,
       fotosCount: entryPhotos.length,
     };
