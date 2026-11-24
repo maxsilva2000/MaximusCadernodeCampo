@@ -4501,9 +4501,28 @@ function openEntryModal(existing, defaultDate, student){
     e.target.value = '';
   });
 
+  const devEl = document.getElementById('f-dev');
+  const dataEl = document.getElementById('f-data');
+  const textoFalta = ()=> `O aluno faltou no dia ${fmtDateBR(dataEl.value)}.`;
+  let devAntesDaFalta = null;
+  let textoFaltaAtual = null;
   document.getElementById('f-presente').addEventListener('change', (e)=>{
     document.getElementById('presence-block').style.display = e.target.value==='sim' ? 'block':'none';
     document.getElementById('absence-block').style.display = e.target.value==='nao' ? 'block':'none';
+    if(e.target.value==='nao'){
+      devAntesDaFalta = devEl.value;
+      textoFaltaAtual = textoFalta();
+      devEl.value = textoFaltaAtual;
+    } else {
+      if(textoFaltaAtual!==null && devEl.value===textoFaltaAtual) devEl.value = devAntesDaFalta || '';
+      textoFaltaAtual = null;
+    }
+  });
+  dataEl.addEventListener('change', ()=>{
+    if(textoFaltaAtual!==null && devEl.value===textoFaltaAtual){
+      textoFaltaAtual = textoFalta();
+      devEl.value = textoFaltaAtual;
+    }
   });
 
   attachMic(document.getElementById('mic-dev'), document.getElementById('f-dev'));
@@ -4566,7 +4585,7 @@ function openEntryModal(existing, defaultDate, student){
       recreioFim: presente ? document.getElementById('f-recreio-fim').value : '',
       recreioParticipacao: presente ? document.getElementById('f-recreio-participacao').value : '',
       recreioInteracao: presente ? document.getElementById('f-recreio-interacao').value : '',
-      desenvolvimento: document.getElementById('f-dev').value,
+      desenvolvimento: (!presente && !document.getElementById('f-dev').value.trim()) ? `O aluno faltou no dia ${fmtDateBR(document.getElementById('f-data').value)}.` : document.getElementById('f-dev').value,
       fotosCount: entryPhotos.length,
     };
     const list = appData.entries[student.id] || [];
